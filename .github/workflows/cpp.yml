@@ -1,0 +1,41 @@
+name: C++ CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgl1-mesa-dev libx11-dev
+
+      - name: Build with cmake
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make -j4
+        working-directory: ${{ github.workspace }}
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build with cmake
+        run: |
+          mkdir build
+          cd build
+          cmake -G "MinGW Makefiles" ..
+          make -j4
+        working-directory: ${{ github.workspace }}
