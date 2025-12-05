@@ -13,10 +13,12 @@ clear:
 	-rm build/cmake_install.cmake
 else
 debug:
-	mkdir build && cd build && cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug .. && $(MAKE) -j$(nproc) -s
+	-mkdir build
+	cd build && cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Debug .. && $(MAKE) -j$(nproc) -s
 
 release:
-	mkdir build && cd build && cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release .. && $(MAKE) -j$(nproc) -s
+	-mkdir build
+	cd build && cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release .. && $(MAKE) -j$(nproc) -s
 
 clear:
 	-rmdir /s /q build/CMakeFiles
