@@ -7,10 +7,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(cmake/Utils.cmake)
-
-# Global list to accumulate custom libs
-set(CUSTOM_LIBS "")
 set(LIB_DIR ${CMAKE_SOURCE_DIR}/lib)
 
 # -------------------------
@@ -65,7 +61,8 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG   "${COMMON_FLAGS} ${DEBUG_FLAGS}")
 set(CMAKE_CXX_FLAGS_RELEASE "${COMMON_FLAGS} ${RELEASE_FLAGS}")
 
-add_or_fetch_library(NAME sodium STATIC_LIB_FILE ${SODIUM_LIB})
+add_library(sodium STATIC IMPORTED GLOBAL)
+set_target_properties(sodium PROPERTIES IMPORTED_LOCATION ${SODIUM_LIB})
 
 # Objects
 file(GLOB_RECURSE SOURCES src/*.cpp)
@@ -75,16 +72,13 @@ target_include_directories(objects PUBLIC include src)
 
 # Main executable
 add_executable(main src/main.cpp $<TARGET_OBJECTS:objects>)
-target_link_libraries(main PRIVATE ${CUSTOM_LIBS} ${SYSTEM_LIBS})
+target_link_libraries(main PRIVATE ${SYSTEM_LIBS})
+target_link_libraries(main PUBLIC sodium)
 target_include_directories(main PUBLIC include src)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set_target_properties(main PROPERTIES LINK_FLAGS ${RELEASE_LINKER_FLAGS})
 endif()
-
-# Library
-add_library(networking STATIC $<TARGET_OBJECTS:objects>)
-target_link_libraries(networking PRIVATE ${CUSTOM_LIBS} ${SYSTEM_LIBS})
 
 # Custom target for MakeTarget
 add_custom_target(MAKE_TARGETS
