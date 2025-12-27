@@ -3,24 +3,32 @@
 
 #include "Log/Log.h"
 
+#include <cstring>
+
 int main(int argc, char* argv[])
 {
 	NetworkCore core;
 
+	bool isServer;
+
 	if (argc == 2 && std::string(argv[1]) == "-c")
 	{
-		Output("Starting client");
+		Log("Starting client");
 
-		core.InitClient(1);
+		isServer = false;
 
-		Log(core.Connect(Address{"127.0.0.1", 3131}));
+		core.InitClient();
+
+		core.Connect(Address{"127.0.0.1", 1313});
 	}
 
 	else if (argc == 2 &&  std::string(argv[1]) == "-s")
 	{
-		Output("Starting server");
+		Log("Starting server");
 
-		core.InitServer(3131, 10, 1);
+		isServer = true;
+
+		core.InitServer(1313);
 	}
 
 	else
@@ -41,7 +49,19 @@ int main(int argc, char* argv[])
 
 			if (event.type == NetworkEventType::Connect)
 			{
-				Log("Someone connected");
+				Log("Someone connected from: ", event.address.ip, ":", event.address.port);
+
+				if (isServer)
+				{
+					const char* message = "Hello there from server";
+					core.Send(event.peer , std::vector<u8>(message, message + strlen(message)));
+				}
+
+				else
+				{
+					const char* message = "Hello there from client";
+					core.Send(event.peer, std::vector<u8>(message, message + strlen(message)));
+				}
 			}
 
 			else if (event.type == NetworkEventType::Disconnect)
@@ -49,9 +69,17 @@ int main(int argc, char* argv[])
 				Log("Someone disconnected");
 			}
 
+			else if (event.type == NetworkEventType::Receive)
+			{
+				std::string message((char*)event.data.data(), event.data.size());
+				Log("Got something");
+				Output("Size: ", event.data.size());
+				Output("Data: ", message);
+			}
+
 			else
 			{
-				Log("Got something");
+				Log("Failed to connect to: ", event.address.ip, ":", event.address.port);
 			}
 
 			events.pop();

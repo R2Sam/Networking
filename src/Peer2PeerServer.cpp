@@ -68,7 +68,7 @@ void Peer2PeerServer::HandleHost(const PeerId peer)
 
 	Peer2PeerPacket packet{Peer2PeerPacketType::HostId, peer};
 
-	_server.Send(peer, 1, Serialize<Peer2PeerPacket>(packet));
+	_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 }
 
 void Peer2PeerServer::HandleReceive(const PeerId peer, const Peer2PeerPacket& packet) 
@@ -90,7 +90,7 @@ void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 	{
 		Peer2PeerPacket packet{Peer2PeerPacketType::Address, 0, Address()};
 
-		_server.Send(peer, 1, Serialize<Peer2PeerPacket>(packet));
+		_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 		return;
 	}
 
@@ -101,8 +101,8 @@ void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 	Peer2PeerPacket clientPacket{Peer2PeerPacketType::Address, 0, _server.GetPeer(peer).address};
 	std::vector<u8> clientData = Serialize<Peer2PeerPacket>(clientPacket);
 
-	_server.Send(peer, 1, hostData);
-	_server.Send(target, 1, clientData);
+	_server.Send(peer, hostData);
+	_server.Send(target, clientData);
 }
 
 void Peer2PeerServer::HandleList(const PeerId peer) 
@@ -116,5 +116,5 @@ void Peer2PeerServer::HandleList(const PeerId peer)
 
 	Peer2PeerPacket packet{Peer2PeerPacketType::Hosts, 0, Address(), hosts};
 
-	_server.Send(peer, 1, Serialize<Peer2PeerPacket>(packet));
+	_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 }
