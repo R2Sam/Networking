@@ -143,7 +143,7 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	}
 }
 
-bool NetworkCore::Send(const PeerId peer, const ChannelId channel, const std::vector<u8>& data, const bool reliable) 
+bool NetworkCore::Send(const PeerId peer, const std::vector<u8>& data, const ChannelId channel, const bool reliable) 
 {
 	Peer p = _peerManager.GetPeer(peer);
 
