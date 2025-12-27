@@ -37,4 +37,14 @@ struct NetworkEvent
 	ChannelId channel;
 	std::vector<u8> data;
 	Address address;
+
+	NetworkEvent(const NetworkEventType type, const PeerId peer, const ChannelId channel, const std::vector<u8>& data, const Address& address) :
+	type(type),
+	peer(peer),
+	channel(channel),
+	data(data),
+	address(address)
+	{
+
+	}
 };

@@ -37,7 +37,7 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 
 	if (!_host)
 	{
-		LogColor(LOG_RED, "Enet failed to create server");
+		LogColor(LOG_RED, "Enet failed to create server at port: ", addr.port);
 		return false;
 	}
 
@@ -56,7 +56,7 @@ bool NetworkCore::InitClient(const u32 channels)
 
 	if (!_host)
 	{
-		LogColor(LOG_RED, "Enet failed to create server");
+		LogColor(LOG_RED, "Enet failed to create client");
 		return false;
 	}
 
@@ -143,7 +143,7 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	}
 }
 
-bool NetworkCore::Send(const PeerId peer, const ChannelId channel, const std::vector<u8>& data, const bool reliable) 
+bool NetworkCore::Send(const PeerId peer, const std::vector<u8>& data, const ChannelId channel, const bool reliable) 
 {
 	Peer p = _peerManager.GetPeer(peer);
 
@@ -197,13 +197,13 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 		address.ip = hostBuf;
 		address.port = event.peer->address.port;
 
-		_peerManager.AddPeer(event.peer, address, ConnectionState::Connected);
+		PeerId id = _peerManager.AddPeer(event.peer, address, ConnectionState::Connected);
 
 		std::vector<u8> data(4);
 		Assert(sizeof(event.data) == data.size(), "memcpy size must match");
 		memcpy(data.data(), &event.data, data.size());
 
-		events.emplace(NetworkEventType::Connect, p.id, 0, data, p.address);
+		events.emplace(NetworkEventType::Connect, id, 0, data, address);
 	}
 
 	else
