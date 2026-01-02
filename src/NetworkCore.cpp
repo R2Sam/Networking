@@ -6,6 +6,9 @@
 #include "Log/Log.h"
 #include "Assert.h"
 
+#include <zlib.h>
+#include <cstring>
+
 NetworkCore::NetworkCore() 
 {
 	if (enet_initialize())
@@ -41,6 +44,8 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 		return false;
 	}
 
+	AddCompression(_host);
+
 	return true;
 }
 
@@ -60,6 +65,8 @@ bool NetworkCore::InitClient(const u32 channels)
 		return false;
 	}
 
+	AddCompression(_host);
+
 	return true;
 }
 
@@ -76,11 +83,9 @@ PeerId NetworkCore::Connect(const Address& address, const u32 data)
 {
 	if (!_host) return 0;
 
-
 	ENetAddress addr;
 	enet_address_set_host(&addr, address.ip.c_str());
 	addr.port = address.port;
-
 
 	_ENetPeer* p = enet_host_connect(_host, &addr, _host->channelLimit, data);
 	if (!p)
@@ -248,4 +253,33 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 	enet_packet_destroy(event.packet);
 
 	events.emplace(NetworkEventType::Receive, p.id, event.channelID, data, p.address);
+}
+
+void NetworkCore::AddCompression(_ENetHost* const _host) 
+{
+	ENetCompressor zlibCompressor = {0,
+	[](void* context, const ENetBuffer* buffers, u64 bufferCount, u64 inputLimit, unsigned char* output, u64 outputLimit)
+	{
+		unsigned char* inputData = new unsigned char[inputLimit];
+		u64 offset = 0;
+
+		for (u64 i = 0; i < bufferCount; ++i)
+		{
+			memcpy(inputData + offset, buffers[i].data, buffers[i].dataLength);
+			offset += buffers[i].dataLength;
+		}
+
+		u64 outputLength = outputLimit;
+		u32 result = compress2(output, &outputLength, inputData, inputLimit, Z_BEST_SPEED);
+		return u64(result == Z_OK ? outputLength : 0);
+	},
+
+	[](void* context, const unsigned char* input, u64 inputLength, unsigned char* output, u64 outputLength)
+	{
+		u32 result = uncompress(output, &outputLength, input, inputLength);
+		return u64(result == Z_OK);
+	},
+	nullptr};
+
+	enet_host_compress(_host, &zlibCompressor);
 }
