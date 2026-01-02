@@ -1,13 +1,15 @@
 cmake_minimum_required(VERSION 3.25)
 project(MyProject CXX)
 
+# -------------------------
+# C++ standard & output
+# -------------------------
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
-
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(LIB_DIR ${CMAKE_SOURCE_DIR}/lib)
+set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
 # -------------------------
 # Platform detection
@@ -15,24 +17,20 @@ set(LIB_DIR ${CMAKE_SOURCE_DIR}/lib)
 if (WIN32)
     message(STATUS "Building on Windows")
 
-    set(RELEASE_FLAGS "-O3")
-    set(DEBUG_FLAGS "-Og -gdwarf-4")
+    set(COMMON_FLAGS "-Wall -Wextra -pedantic -fopenmp -fmax-errors=5 -Wno-missing-field-initializers -Wno-narrowing -Wno-enum-compare -Wno-reorder -Wno-shadow -Wno-deprecated-declarations -O3")
+    set(LINK_FLAGS "-s -mwindows")
 
-    set(RELEASE_LINKER_FLAGS "-s -mwindows")
-
-    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 winmm gomp -static)
+    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 gomp -static)
 
     set(SODIUM_LIB ${LIB_DIR}/libsodium.a)
 
 elseif(UNIX AND NOT APPLE AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
     message(STATUS "Building on Linux")
 
-    set(RELEASE_FLAGS "-O3")
-    set(DEBUG_FLAGS "-Og -gdwarf-4")
+    set(COMMON_FLAGS "-Wall -Wextra -pedantic -fopenmp -fmax-errors=5 -Wno-missing-field-initializers -Wno-narrowing -Wno-enum-compare -Wno-reorder -Wno-shadow -Wno-deprecated-declarations -O3")
+    set(LINK_FLAGS "-s")
 
-    set(RELEASE_LINKER_FLAGS "-s")
-
-    set(SYSTEM_LIBS GL m pthread dl rt X11 gomp)
+    set(SYSTEM_LIBS GL m pthread dl rt X11 gomp z)
 
     set(SODIUM_LIB ${LIB_DIR}/libsodium-Linux.a)
 
@@ -44,59 +42,28 @@ else()
 endif()
 
 # -------------------------
-# Common flags
+# Compiler flags
 # -------------------------
-set(COMMON_FLAGS "-Wall -Wextra -pedantic -fopenmp -fmax-errors=5 -Wno-missing-field-initializers -Wno-narrowing -Wno-enum-compare -Wno-reorder -Wno-shadow -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "${COMMON_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${LINK_FLAGS}")
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose build type" FORCE)
-endif()
-
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    message(STATUS "Building release")
-elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(STATUS "Building debug")
-endif()
-
-set(CMAKE_CXX_FLAGS_DEBUG   "${COMMON_FLAGS} ${DEBUG_FLAGS}")
-set(CMAKE_CXX_FLAGS_RELEASE "${COMMON_FLAGS} ${RELEASE_FLAGS}")
-
-add_library(sodium STATIC IMPORTED GLOBAL)
-set_target_properties(sodium PROPERTIES IMPORTED_LOCATION ${SODIUM_LIB})
-
-# Objects
+# -------------------------
+# Imported libraries (release only)
+# -------------------------
+add_library(Networking::sodium STATIC IMPORTED)
+set_target_properties(Networking::sodium PROPERTIES IMPORTED_LOCATION ${SODIUM_LIB})
+# -------------------------
+# Object library for sources
+# -------------------------
 file(GLOB_RECURSE SOURCES src/*.cpp)
 list(FILTER SOURCES EXCLUDE REGEX ".*/main\\.cpp$")
-add_library(objects OBJECT ${SOURCES})
-target_include_directories(objects PUBLIC include src)
 
-# Main executable
-add_executable(main src/main.cpp $<TARGET_OBJECTS:objects>)
-target_link_libraries(main PRIVATE ${SYSTEM_LIBS})
-target_link_libraries(main PUBLIC sodium)
-target_include_directories(main PUBLIC include src)
+add_library(NetworkingObjects OBJECT ${SOURCES})
+target_include_directories(NetworkingObjects PUBLIC include src)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set_target_properties(main PROPERTIES LINK_FLAGS ${RELEASE_LINKER_FLAGS})
-endif()
-
-# Custom target for MakeTarget
-add_custom_target(MAKE_TARGETS
-    COMMAND ${CMAKE_COMMAND} -P "cmake/MakeTargets.cmake"
-    VERBATIM
-)
-
-# Run target
-if (UNIX AND NOT APPLE)
-    add_custom_target(run
-        COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/main
-        DEPENDS main
-        WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-    )
-elseif(WIN32)
-    add_custom_target(run
-        COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/main.exe
-        DEPENDS main
-        WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-    )
-endif()
+# -------------------------
+# Static library for engine
+# -------------------------
+add_library(networking STATIC $<TARGET_OBJECTS:NetworkingObjects>)
+target_include_directories(networking PUBLIC include src)
+target_link_libraries(networking PRIVATE Networking::sodium ${SYSTEM_LIBS})

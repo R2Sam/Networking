@@ -83,11 +83,9 @@ PeerId NetworkCore::Connect(const Address& address, const u32 data)
 {
 	if (!_host) return 0;
 
-
 	ENetAddress addr;
 	enet_address_set_host(&addr, address.ip.c_str());
 	addr.port = address.port;
-
 
 	_ENetPeer* p = enet_host_connect(_host, &addr, _host->channelLimit, data);
 	if (!p)
