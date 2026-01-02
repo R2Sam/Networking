@@ -1,10 +1,18 @@
 #include "NetworkCore.h"
 
+#define __EMSCRIPTEN__
+
+#ifndef __EMSCRIPTEN__
 #define ENET_IMPLEMENTATION
-#include "enet/enet.h"
+// #include "enet/enet.h"
+#else
+#include "enet/enet-Web.h"
+#endif
 
 #include "Log/Log.h"
 #include "Assert.h"
+
+#include <cstring>
 
 NetworkCore::NetworkCore() 
 {
@@ -125,7 +133,9 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 			break;
 
 			case ENET_EVENT_TYPE_DISCONNECT:
+#ifndef __EMSCRIPTEN__
 			case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
+#endif
 			{
 				HandleDisconnect(event, events);
 			}

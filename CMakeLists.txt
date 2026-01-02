@@ -35,6 +35,7 @@ elseif(UNIX AND NOT APPLE AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
 
     set(SYSTEM_LIBS GL m pthread dl rt X11 gomp)
 
+    set(ENET_LIB ${LIB_DIR}/libenet-Linux.a)
     set(SODIUM_LIB ${LIB_DIR}/libsodium-Linux.a)
 
 elseif(UNIX AND NOT APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
@@ -81,6 +82,12 @@ set_target_properties(sodium PROPERTIES
     LINKER_LANGUAGE CXX
 )
 
+add_library(enet STATIC IMPORTED GLOBAL)
+set_target_properties(enet PROPERTIES
+    IMPORTED_LOCATION ${ENET_LIB}
+    LINKER_LANGUAGE CXX
+)
+
 # -------------------------
 # Fetch and build engine
 # -------------------------
@@ -108,7 +115,7 @@ target_compile_options(main PRIVATE
 )
 
 target_link_libraries(main PRIVATE ${SYSTEM_LIBS})
-target_link_libraries(main PUBLIC sodium)
+target_link_libraries(main PUBLIC sodium enet)
 
 # -------------------------
 # Release linker flags

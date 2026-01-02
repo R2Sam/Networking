@@ -1,6 +1,10 @@
 #include "PeerManager.h"
 
+#ifndef __EMSCRIPTEN__
 #include "enet/enet.h"
+#else
+#include "enet/enet-Web.h"
+#endif
 
 #include "Assert.h"
 

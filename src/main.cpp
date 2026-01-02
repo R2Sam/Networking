@@ -3,26 +3,51 @@
 
 #include "Log/Log.h"
 
+#include <arpa/inet.h>
+#include <cstdio>
 #include <cstring>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h> 
 
-int main(int argc, char* argv[])
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/websocket.h>
+#include <emscripten/threading.h>
+#include <emscripten/posix_socket.h>
+
+static EMSCRIPTEN_WEBSOCKET_T bridgeSocket = 0;
+#endif
+
+int main()
 {
+// #ifdef __EMSCRIPTEN__
+//   bridgeSocket = emscripten_init_websocket_to_posix_socket_bridge("ws://localhost:8080");
+//   // Synchronously wait until connection has been established.
+//   uint16_t readyState = 0;
+//   do {
+//     emscripten_websocket_get_ready_state(bridgeSocket, &readyState);
+//     emscripten_thread_sleep(100);
+//   } while (readyState == 0);
+// #endif
+
 	NetworkCore core;
 
 	bool isServer;
 
-	if (argc == 2 && std::string(argv[1]) == "-c")
+	if (true)
 	{
 		Log("Starting client");
 
 		isServer = false;
 
-		core.InitClient();
+		Log(core.InitServer(3131));
 
+		Log("Attempting to connect");
 		core.Connect(Address{"127.0.0.1", 1313});
 	}
 
-	else if (argc == 2 &&  std::string(argv[1]) == "-s")
+	else if (false)
 	{
 		Log("Starting server");
 
@@ -41,7 +66,7 @@ int main(int argc, char* argv[])
 
 	while(true)
 	{
-		core.Poll(events, 100);
+		core.Poll(events, 0);
 
 		while(events.size())
 		{
