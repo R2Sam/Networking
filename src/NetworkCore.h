@@ -36,6 +36,8 @@ private:
 	void HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEvent>& events);
 	void HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent>& events);
 
+	void AddCompression(_ENetHost* const _host);
+
 private:
 
 	_ENetHost* _host = nullptr;
