@@ -2,9 +2,9 @@ name: C++ CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "lib" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "lib" ]
 
 jobs:
   linux:
@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libgl1-mesa-dev libx11-dev
+          sudo apt-get install -y build-essential libgl1-mesa-dev libx11-dev zlib1g-dev
 
       - name: Build with cmake
         run: |

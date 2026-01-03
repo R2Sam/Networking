@@ -258,26 +258,27 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 void NetworkCore::AddCompression(_ENetHost* const _host) 
 {
 	ENetCompressor zlibCompressor = {0,
-	[](void* context, const ENetBuffer* buffers, u64 bufferCount, u64 inputLimit, unsigned char* output, u64 outputLimit)
+	[](void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit, unsigned char* output, size_t outputLimit)
 	{
 		unsigned char* inputData = new unsigned char[inputLimit];
-		u64 offset = 0;
+		size_t offset = 0;
 
-		for (u64 i = 0; i < bufferCount; ++i)
+		for (size_t i = 0; i < bufferCount; ++i)
 		{
 			memcpy(inputData + offset, buffers[i].data, buffers[i].dataLength);
 			offset += buffers[i].dataLength;
 		}
 
-		u64 outputLength = outputLimit;
-		u32 result = compress2(output, &outputLength, inputData, inputLimit, Z_BEST_SPEED);
-		return u64(result == Z_OK ? outputLength : 0);
+		uLongf outputLength = outputLimit;
+		size_t result = compress2(output, &outputLength, inputData, inputLimit, Z_BEST_SPEED);
+		return size_t(result == Z_OK ? outputLength : 0);
 	},
 
-	[](void* context, const unsigned char* input, u64 inputLength, unsigned char* output, u64 outputLength)
+	[](void* context, const unsigned char* input, size_t inputLength, unsigned char* output, size_t outputLength)
 	{
-		u32 result = uncompress(output, &outputLength, input, inputLength);
-		return u64(result == Z_OK);
+		uLongf outputLengthULongf = outputLength;
+		u32 result = uncompress(output, &outputLengthULongf, input, inputLength);
+		return size_t(result == Z_OK);
 	},
 	nullptr};
 
