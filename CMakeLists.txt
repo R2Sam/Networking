@@ -20,7 +20,7 @@ if (WIN32)
 
     set(RELEASE_LINKER_FLAGS "-s -mwindows")
 
-    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 winmm gomp -static)
+    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 winmm gomp z -static)
 
     set(SODIUM_LIB ${LIB_DIR}/libsodium.a)
 
@@ -32,7 +32,7 @@ elseif(UNIX AND NOT APPLE AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
 
     set(RELEASE_LINKER_FLAGS "-s")
 
-    set(SYSTEM_LIBS GL m pthread dl rt X11 gomp)
+    set(SYSTEM_LIBS GL m pthread dl rt X11 gomp z)
 
     set(SODIUM_LIB ${LIB_DIR}/libsodium-Linux.a)
 
