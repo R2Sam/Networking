@@ -20,7 +20,7 @@ if (WIN32)
     set(COMMON_FLAGS "-Wall -Wextra -pedantic -fopenmp -fmax-errors=5 -Wno-missing-field-initializers -Wno-narrowing -Wno-enum-compare -Wno-reorder -Wno-shadow -Wno-deprecated-declarations -O3")
     set(LINK_FLAGS "-s -mwindows")
 
-    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 gomp z -static)
+    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 gomp ${LIB_DIR}/libz.a -static)
 
     set(SODIUM_LIB ${LIB_DIR}/libsodium.a)
 

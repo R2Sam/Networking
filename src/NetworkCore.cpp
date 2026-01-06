@@ -3,10 +3,11 @@
 #define ENET_IMPLEMENTATION
 #include "enet/enet.h"
 
+#include "zlib/zlib.h"
+
 #include "Log/Log.h"
 #include "Assert.h"
 
-#include <zlib.h>
 #include <cstring>
 
 NetworkCore::NetworkCore() 
