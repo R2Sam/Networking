@@ -20,7 +20,7 @@ if (WIN32)
 
     set(RELEASE_LINKER_FLAGS "-s -mwindows")
 
-    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 winmm gomp z -static)
+    set(SYSTEM_LIBS opengl32 gdi32 winmm ws2_32 winmm gomp ${LIB_DIR}/libz.a -static)
 
     set(SODIUM_LIB ${LIB_DIR}/libsodium.a)
 
