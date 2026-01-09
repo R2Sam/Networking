@@ -184,6 +184,41 @@ bool NetworkCore::Send(const PeerId peer, const std::vector<u8>& data, const Cha
 	return true;
 }
 
+bool NetworkCore::Send(const PeerId peer, const u8* data, const u32 size, const ChannelId channel, const bool reliable) 
+{
+	Peer p = _peerManager.GetPeer(peer);
+
+	if (!p.enetPeer)
+	{
+		LogColor(LOG_YELLOW, "Cannot sent to peer ", peer, ", peer does not exist");
+		return false;
+	}
+
+	if (channel >= p.enetPeer->channelCount)
+	{
+		LogColor(LOG_YELLOW, "ChannelId was invalid when sending to peer ", peer);
+		return false;
+	}
+
+	_ENetPacket* packet = enet_packet_create(data, size, reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
+
+	if (!packet)
+	{
+		LogColor(LOG_YELLOW, "Failed to create packet when sending to peer ", peer);
+		return false;
+	}
+
+	u32 send = enet_peer_send(p.enetPeer, channel, packet);
+
+	if (send)
+	{
+		enet_packet_destroy(packet);
+		return false;
+	}
+
+	return true;
+}
+
 Peer NetworkCore::GetPeer(const PeerId peer) 
 {
 	return _peerManager.GetPeer(peer);
