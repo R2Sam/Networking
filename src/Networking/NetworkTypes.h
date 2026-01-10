@@ -9,6 +9,7 @@ using PeerId = u32;
 using ChannelId = u8;
 
 struct _ENetPeer;
+using ws_cli_conn_t = u64;
 
 struct Address
 {
@@ -28,6 +29,7 @@ struct Peer
 {
 	PeerId id = 0;
 	_ENetPeer* enetPeer = nullptr;
+	ws_cli_conn_t wsPeer = 0;
 	Address address;
 	ConnectionState state = ConnectionState::Disconnected;
 };

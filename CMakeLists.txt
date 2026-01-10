@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(Networking
-  VERSION 1.0.0
+  VERSION 0.0.1
   LANGUAGES CXX
 )
+
+include(FetchContent)
 
 # ------------------------------------------------------------------------------
 # C++ standard & output
@@ -104,10 +106,20 @@ string(JOIN " " CMAKE_EXE_LINKER_FLAGS ${LINK_FLAGS})
 # ------------------------------------------------------------------------------
 # Imported third-party libraries
 # ------------------------------------------------------------------------------
-add_library(Networking::sodium STATIC IMPORTED)
-set_target_properties(Networking::sodium PROPERTIES
+add_library(sodium STATIC IMPORTED)
+set_target_properties(sodium PROPERTIES
   IMPORTED_LOCATION ${SODIUM_LIB}
 )
+
+FetchContent_Declare(
+    ws
+    GIT_REPOSITORY "https://github.com/Theldus/wsServer.git"
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+    EXCLUDE_FROM_ALL
+)
+
+FetchContent_MakeAvailable(ws)
 
 # ------------------------------------------------------------------------------
 # Networking static library
@@ -128,6 +140,7 @@ target_include_directories(networking
 
 target_link_libraries(networking
   PRIVATE
-    Networking::sodium
+    ws
+    sodium
     ${SYSTEM_LIBS}
 )
