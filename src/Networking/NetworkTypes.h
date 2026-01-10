@@ -8,6 +8,8 @@
 using PeerId = u32;
 using ChannelId = u8;
 
+struct _ENetPeer;
+
 struct Address
 {
 	std::string ip = "";
@@ -22,6 +24,14 @@ enum class ConnectionState
 	Disconnected
 };
 
+struct Peer
+{
+	PeerId id = 0;
+	_ENetPeer* enetPeer = nullptr;
+	Address address;
+	ConnectionState state = ConnectionState::Disconnected;
+};
+
 enum class NetworkEventType
 {
 	Connect,
@@ -33,17 +43,15 @@ enum class NetworkEventType
 struct NetworkEvent
 {
 	NetworkEventType type;
-	PeerId peer;
+	Peer peer;
 	ChannelId channel;
 	std::vector<u8> data;
-	Address address;
 
-	NetworkEvent(const NetworkEventType type, const PeerId peer, const ChannelId channel, const std::vector<u8>& data, const Address& address) :
+	NetworkEvent(const NetworkEventType type, const Peer& peer, const ChannelId channel, const std::vector<u8>& data) :
 	type(type),
 	peer(peer),
 	channel(channel),
-	data(data),
-	address(address)
+	data(data)
 	{
 
 	}

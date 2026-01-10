@@ -22,13 +22,14 @@ public:
 	bool InitClient(const u32 channels = 1);
 	void Shutdown();
 
-	PeerId Connect(const Address& address, const u32 data = 0);
+	Peer Connect(const Address& address, const u32 data = 0);
 	void Disconnect(const PeerId peer, const u32 data = 0);
 	void Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs = 0);
 
 	bool Send(const PeerId peer, const std::vector<u8>& data, const ChannelId channel = 0, const bool reliable = true);
 
-	Peer GetPeer(const PeerId peer);
+	Peer GetPeer(const PeerId peer) const;
+	const std::unordered_map<PeerId, Peer>& GetPeers() const;
 
 private:
 

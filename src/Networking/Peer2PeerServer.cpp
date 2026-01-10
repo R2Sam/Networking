@@ -35,14 +35,14 @@ void Peer2PeerServer::Poll(const u32 timeoutMs)
 
 				if (data)
 				{
-					HandleHost(event.peer);
+					HandleHost(event.peer.id);
 				}
 			}
 			break;
 
 			case NetworkEventType::Disconnect:
 			{
-				_hosts.erase(event.peer);
+				_hosts.erase(event.peer.id);
 			}
 			break;
 
@@ -50,7 +50,7 @@ void Peer2PeerServer::Poll(const u32 timeoutMs)
 			{
 				Peer2PeerPacket packet = Deserialize<Peer2PeerPacket>(event.data);
 
-				HandleReceive(event.peer, packet);
+				HandleReceive(event.peer.id, packet);
 			}
 			break;
 

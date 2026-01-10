@@ -5,30 +5,22 @@
 #include <queue>
 #include <unordered_map>
 
-struct _ENetPeer;
-
-struct Peer
-{
-	PeerId id = 0;
-	_ENetPeer* enetPeer = nullptr;
-	Address address;
-	ConnectionState state = ConnectionState::Disconnected;
-};
-
 class PeerManager
 {
 public:
 
-	PeerId AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state);
-	void RemovePeer(const PeerId peer);
+	Peer AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state);
+	void RemovePeer(const PeerId peerId);
 
-	Peer GetPeer(const PeerId peer);
-	Peer GetPeerEnet(const u32 enetPeerId);
+	Peer GetPeer(const PeerId peerId) const;
+	Peer GetPeerEnet(const u32 enetPeerId) const;
+
+	const std::unordered_map<PeerId, Peer>& GetPeers() const;
 
 private:
 
 	PeerId AllocateId();
-	void FreeId(const PeerId peer);
+	void FreeId(const PeerId peerId);
 
 private:
 

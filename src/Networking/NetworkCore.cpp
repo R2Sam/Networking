@@ -14,7 +14,7 @@ NetworkCore::NetworkCore()
 {
 	if (enet_initialize())
 	{
-		LogColor(LOG_YELLOW, "Failed to initalize enet");
+		LogColor(LOG_YELLOW, "Failed to initialize enet");
 	}
 }
 
@@ -80,9 +80,12 @@ void NetworkCore::Shutdown()
 	}
 }
 
-PeerId NetworkCore::Connect(const Address& address, const u32 data)
+Peer NetworkCore::Connect(const Address& address, const u32 data)
 {
-	if (!_host) return 0;
+	if (!_host)
+	{
+		return {};
+	}
 
 	ENetAddress addr;
 	enet_address_set_host(&addr, address.ip.c_str());
@@ -92,12 +95,12 @@ PeerId NetworkCore::Connect(const Address& address, const u32 data)
 	if (!p)
 	{
 		LogColor(LOG_YELLOW, "Failed to initialize connection to ", address.ip, ":", address.port);
-		return 0;
+		return {};
 	}
 
-	PeerId id = _peerManager.AddPeer(p, address, ConnectionState::Connecting);
+	Peer peer = _peerManager.AddPeer(p, address, ConnectionState::Connecting);
 
-	return id;
+	return peer;
 }
 
 void NetworkCore::Disconnect(const PeerId peer, const u32 data) 
@@ -184,16 +187,21 @@ bool NetworkCore::Send(const PeerId peer, const std::vector<u8>& data, const Cha
 	return true;
 }
 
-Peer NetworkCore::GetPeer(const PeerId peer) 
+Peer NetworkCore::GetPeer(const PeerId peer) const
 {
 	return _peerManager.GetPeer(peer);
 }
 
+const std::unordered_map<PeerId, Peer>& NetworkCore::GetPeers() const
+{
+	return _peerManager.GetPeers();
+}
+
 void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent>& events) 
 {
-	Peer p = _peerManager.GetPeerEnet(event.peer->connectID);
+	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
 
-	if (!p.enetPeer)
+	if (!peer.enetPeer)
 	{
 		Address address;
 
@@ -203,49 +211,49 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 		address.ip = hostBuf;
 		address.port = event.peer->address.port;
 
-		PeerId id = _peerManager.AddPeer(event.peer, address, ConnectionState::Connected);
+		Peer newPeer = _peerManager.AddPeer(event.peer, address, ConnectionState::Connected);
 
 		std::vector<u8> data(4);
 		Assert(sizeof(event.data) == data.size(), "memcpy size must match");
 		memcpy(data.data(), &event.data, data.size());
 
-		events.emplace(NetworkEventType::Connect, id, 0, data, address);
+		events.emplace(NetworkEventType::Connect, newPeer, 0, data);
 	}
 
 	else
 	{
-		events.emplace(NetworkEventType::Connect, p.id, 0, std::vector<u8>(), p.address);
+		events.emplace(NetworkEventType::Connect, peer, 0, std::vector<u8>());
 	}
 }
 
 void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEvent>& events) 
 {
-	Peer p = _peerManager.GetPeerEnet(event.peer->connectID);
+	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
 
-	if (!p.enetPeer)
+	if (!peer.enetPeer)
 	{
 		return;
 	}
 
-	if (p.state == ConnectionState::Connected)
+	if (peer.state == ConnectionState::Connected)
 	{
-		events.emplace(NetworkEventType::Disconnect, p.id, 0, std::vector<u8>(), p.address);
+		events.emplace(NetworkEventType::Disconnect, peer, 0, std::vector<u8>());
 	}
 
 	else
 	{
-		events.emplace(NetworkEventType::FailedConnection, p.id, 0, std::vector<u8>(), p.address);
+		events.emplace(NetworkEventType::FailedConnection, peer, 0, std::vector<u8>());
 	}
 
-	_peerManager.RemovePeer(p.id);
+	_peerManager.RemovePeer(peer.id);
 }
 
 void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent>& events) 
 {
-	Peer p = _peerManager.GetPeerEnet(event.peer->connectID);
+	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
 
 	// Tough should we do something I don't think this is supposed to happen
-	if (!p.enetPeer)
+	if (!peer.enetPeer)
 	{
 		return;
 	}
@@ -253,7 +261,7 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 	std::vector<u8> data(event.packet->data, event.packet->data + event.packet->dataLength);
 	enet_packet_destroy(event.packet);
 
-	events.emplace(NetworkEventType::Receive, p.id, event.channelID, data, p.address);
+	events.emplace(NetworkEventType::Receive, peer, event.channelID, data);
 }
 
 void NetworkCore::AddCompression(_ENetHost* const _host) 

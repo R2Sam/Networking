@@ -4,33 +4,33 @@
 
 #include "Assert.h"
 
-PeerId PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state) 
+Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state) 
 {
 	PeerId id = AllocateId();
 
-	Peer p;
-	p.id = id;
-	p.enetPeer = enetPeer;
-	p.address = address;
-	p.state = state;
+	Peer peer;
+	peer.id = id;
+	peer.enetPeer = enetPeer;
+	peer.address = address;
+	peer.state = state;
 
-	_peers.emplace(id, std::move(p));
+	_peers.emplace(id, peer);
 
 	Assert(enetPeer, "Cannot pass an invalid enetPeer");
 
 	_ids.emplace(enetPeer->connectID, id);
 
-	return id;
+	return peer;
 }
 
-void PeerManager::RemovePeer(const PeerId peer) 
+void PeerManager::RemovePeer(const PeerId peerId) 
 {
-	if (peer == 0)
+	if (peerId == 0)
 	{
 		return;
 	}
 
-	auto it = _peers.find(peer);
+	auto it = _peers.find(peerId);
 	if (it != _peers.end())
 	{
 		Peer p = it->second;
@@ -43,7 +43,7 @@ void PeerManager::RemovePeer(const PeerId peer)
 		u32 enetId = 0;
 		for (const auto pair : _ids)
 		{
-			if (pair.second == peer)
+			if (pair.second == peerId)
 			{
 				enetId = pair.first;
 			}
@@ -52,13 +52,13 @@ void PeerManager::RemovePeer(const PeerId peer)
 		_ids.erase(enetId);
 	}
 
-	FreeId(peer);
+	FreeId(peerId);
 	_peers.erase(it);
 }
 
-Peer PeerManager::GetPeer(const PeerId peer) 
+Peer PeerManager::GetPeer(const PeerId peerId) const
 {
-	auto it = _peers.find(peer);
+	auto it = _peers.find(peerId);
 	if (it != _peers.end())
 	{
 		return it->second;
@@ -71,7 +71,7 @@ Peer PeerManager::GetPeer(const PeerId peer)
 	}
 }
 
-Peer PeerManager::GetPeerEnet(const u32 enetPeerId) 
+Peer PeerManager::GetPeerEnet(const u32 enetPeerId) const
 {
 	auto it = _ids.find(enetPeerId);
 	if (it != _ids.end())
@@ -84,6 +84,11 @@ Peer PeerManager::GetPeerEnet(const u32 enetPeerId)
 		Peer p;
 		return p;
 	}
+}
+
+const std::unordered_map<PeerId, Peer>& PeerManager::GetPeers() const 
+{
+	return _peers;
 }
 
 PeerId PeerManager::AllocateId() 
@@ -99,12 +104,12 @@ PeerId PeerManager::AllocateId()
 	return _nextId++;
 }
 
-void PeerManager::FreeId(const PeerId peer) 
+void PeerManager::FreeId(const PeerId peerId) 
 {
-	if (peer == 0)
+	if (peerId == 0)
 	{
 		return;
 	}
 
-	_freeIds.push(peer);
+	_freeIds.push(peerId);
 }
