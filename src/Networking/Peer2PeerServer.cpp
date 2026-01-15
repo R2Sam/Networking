@@ -2,59 +2,59 @@
 
 #include "Assert.h"
 
-#include <cereal/types/string.hpp>
-#include <cereal/types/vector.hpp>
-#include <cereal/types/utility.hpp>
 #include "Peer2PeerPacket.h"
 #include "cereal/MyCereal.h"
+#include <cereal/types/string.hpp>
+#include <cereal/types/utility.hpp>
+#include <cereal/types/vector.hpp>
 
 #include <cstring>
 
-Peer2PeerServer::Peer2PeerServer() 
+Peer2PeerServer::Peer2PeerServer()
 {
 	_server.InitServer(1313, 100);
 }
 
-void Peer2PeerServer::Poll(const u32 timeoutMs) 
+void Peer2PeerServer::Poll(const u32 timeoutMs)
 {
 	std::queue<NetworkEvent> events;
 
 	_server.Poll(events, timeoutMs);
 
-	while(events.size())
+	while (events.size())
 	{
 		NetworkEvent& event = events.front();
 
 		switch (event.type)
 		{
-			case NetworkEventType::Connect:
+		case NetworkEventType::Connect:
+		{
+			u32 data;
+			Assert(event.data.size() == sizeof(data), "memcpy size must match");
+			memcpy(&data, event.data.data(), sizeof(data));
+
+			if (data)
 			{
-				u32 data;
-				Assert(event.data.size() == sizeof(data), "memcpy size must match");
-				memcpy(&data, event.data.data(), sizeof(data));
-
-				if (data)
-				{
-					HandleHost(event.peer.id);
-				}
+				HandleHost(event.peer.id);
 			}
-			break;
+		}
+		break;
 
-			case NetworkEventType::Disconnect:
-			{
-				_hosts.erase(event.peer.id);
-			}
-			break;
+		case NetworkEventType::Disconnect:
+		{
+			_hosts.erase(event.peer.id);
+		}
+		break;
 
-			case NetworkEventType::Receive:
-			{
-				Peer2PeerPacket packet = Deserialize<Peer2PeerPacket>(event.data);
+		case NetworkEventType::Receive:
+		{
+			Peer2PeerPacket packet = Deserialize<Peer2PeerPacket>(event.data);
 
-				HandleReceive(event.peer.id, packet);
-			}
-			break;
+			HandleReceive(event.peer.id, packet);
+		}
+		break;
 
-			default:
+		default:
 			break;
 		}
 
@@ -62,7 +62,7 @@ void Peer2PeerServer::Poll(const u32 timeoutMs)
 	}
 }
 
-void Peer2PeerServer::HandleHost(const PeerId peer) 
+void Peer2PeerServer::HandleHost(const PeerId peer)
 {
 	_hosts.emplace(peer);
 
@@ -71,7 +71,7 @@ void Peer2PeerServer::HandleHost(const PeerId peer)
 	_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 }
 
-void Peer2PeerServer::HandleReceive(const PeerId peer, const Peer2PeerPacket& packet) 
+void Peer2PeerServer::HandleReceive(const PeerId peer, const Peer2PeerPacket& packet)
 {
 	if (packet.type == Peer2PeerPacketType::Request)
 	{
@@ -84,7 +84,7 @@ void Peer2PeerServer::HandleReceive(const PeerId peer, const Peer2PeerPacket& pa
 	}
 }
 
-void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target) 
+void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 {
 	if (_hosts.find(target) == _hosts.end())
 	{
@@ -97,7 +97,6 @@ void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 	Peer2PeerPacket hostPacket{Peer2PeerPacketType::Address, 0, _server.GetPeer(target).address};
 	std::vector<u8> hostData = Serialize<Peer2PeerPacket>(hostPacket);
 
-
 	Peer2PeerPacket clientPacket{Peer2PeerPacketType::Address, 0, _server.GetPeer(peer).address};
 	std::vector<u8> clientData = Serialize<Peer2PeerPacket>(clientPacket);
 
@@ -105,7 +104,7 @@ void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 	_server.Send(target, clientData);
 }
 
-void Peer2PeerServer::HandleList(const PeerId peer) 
+void Peer2PeerServer::HandleList(const PeerId peer)
 {
 	std::vector<std::pair<PeerId, Address>> hosts;
 

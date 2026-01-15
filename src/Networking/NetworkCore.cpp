@@ -5,12 +5,12 @@
 
 #include "zlib/zlib.h"
 
-#include "Log/Log.h"
 #include "Assert.h"
+#include "Log/Log.h"
 
 #include <cstring>
 
-NetworkCore::NetworkCore() 
+NetworkCore::NetworkCore()
 {
 	if (enet_initialize())
 	{
@@ -18,14 +18,14 @@ NetworkCore::NetworkCore()
 	}
 }
 
-NetworkCore::~NetworkCore() 
+NetworkCore::~NetworkCore()
 {
 	Shutdown();
 
 	enet_deinitialize();
 }
 
-bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 channels) 
+bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 channels)
 {
 	if (_host)
 	{
@@ -50,11 +50,12 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 	return true;
 }
 
-bool NetworkCore::InitClient(const u32 channels) 
+bool NetworkCore::InitClient(const u32 channels)
 {
 	if (_host)
 	{
-		LogColor(LOG_RED, "Host already present");;
+		LogColor(LOG_RED, "Host already present");
+		;
 		return false;
 	}
 
@@ -71,7 +72,7 @@ bool NetworkCore::InitClient(const u32 channels)
 	return true;
 }
 
-void NetworkCore::Shutdown() 
+void NetworkCore::Shutdown()
 {
 	if (_host)
 	{
@@ -103,7 +104,7 @@ Peer NetworkCore::Connect(const Address& address, const u32 data)
 	return peer;
 }
 
-void NetworkCore::Disconnect(const PeerId peerId, const u32 data) 
+void NetworkCore::Disconnect(const PeerId peerId, const u32 data)
 {
 	Peer peer = _peerManager.GetPeer(peerId);
 
@@ -127,32 +128,33 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	{
 		switch (event.type)
 		{
-			case ENET_EVENT_TYPE_CONNECT:
-			{
-				HandleConnect(event, events);
-			}
-			break;
+		case ENET_EVENT_TYPE_CONNECT:
+		{
+			HandleConnect(event, events);
+		}
+		break;
 
-			case ENET_EVENT_TYPE_DISCONNECT:
-			case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
-			{
-				HandleDisconnect(event, events);
-			}
-			break;
+		case ENET_EVENT_TYPE_DISCONNECT:
+		case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
+		{
+			HandleDisconnect(event, events);
+		}
+		break;
 
-			case ENET_EVENT_TYPE_RECEIVE:
-			{
-				HandleReceive(event, events);
-			}
-			break;
+		case ENET_EVENT_TYPE_RECEIVE:
+		{
+			HandleReceive(event, events);
+		}
+		break;
 
-			default:
-			break;;
+		default:
+			break;
+			;
 		}
 	}
 }
 
-bool NetworkCore::Send(const PeerId peerId, const std::vector<u8>& data, const ChannelId channel, const bool reliable) 
+bool NetworkCore::Send(const PeerId peerId, const std::vector<u8>& data, const ChannelId channel, const bool reliable)
 {
 	Peer peer = _peerManager.GetPeer(peerId);
 
@@ -187,7 +189,7 @@ bool NetworkCore::Send(const PeerId peerId, const std::vector<u8>& data, const C
 	return true;
 }
 
-bool NetworkCore::Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel, const bool reliable) 
+bool NetworkCore::Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel, const bool reliable)
 {
 	Peer peer = _peerManager.GetPeer(peerId);
 
@@ -232,7 +234,7 @@ const std::unordered_map<PeerId, Peer>& NetworkCore::GetPeers() const
 	return _peerManager.GetPeers();
 }
 
-void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent>& events) 
+void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent>& events)
 {
 	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
 
@@ -261,7 +263,7 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 	}
 }
 
-void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEvent>& events) 
+void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEvent>& events)
 {
 	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
 
@@ -283,7 +285,7 @@ void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEv
 	_peerManager.RemovePeer(peer.id);
 }
 
-void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent>& events) 
+void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent>& events)
 {
 	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
 
@@ -299,7 +301,7 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 	events.emplace(NetworkEventType::Receive, peer, event.channelID, data);
 }
 
-void NetworkCore::AddCompression(_ENetHost* const _host) 
+void NetworkCore::AddCompression(_ENetHost* const _host)
 {
 	ENetCompressor zlibCompressor = {0,
 	[](void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit, unsigned char* output, size_t outputLimit)

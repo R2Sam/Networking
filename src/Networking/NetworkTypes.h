@@ -55,6 +55,5 @@ struct NetworkEvent
 	channel(channel),
 	data(data)
 	{
-
 	}
 };

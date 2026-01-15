@@ -4,7 +4,7 @@
 
 #include "Assert.h"
 
-Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state) 
+Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state)
 {
 	PeerId id = AllocateId();
 
@@ -23,7 +23,7 @@ Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const Con
 	return peer;
 }
 
-Peer PeerManager::AddPeer(const ws_cli_conn_t wsPeer, const Address& address, const ConnectionState state) 
+Peer PeerManager::AddPeer(const ws_cli_conn_t wsPeer, const Address& address, const ConnectionState state)
 {
 	PeerId id = AllocateId();
 
@@ -40,7 +40,7 @@ Peer PeerManager::AddPeer(const ws_cli_conn_t wsPeer, const Address& address, co
 	return peer;
 }
 
-void PeerManager::RemovePeer(const PeerId peerId) 
+void PeerManager::RemovePeer(const PeerId peerId)
 {
 	if (peerId == 0)
 	{
@@ -130,12 +130,12 @@ Peer PeerManager::GetPeerWs(const ws_cli_conn_t wsPeer) const
 	}
 }
 
-const std::unordered_map<PeerId, Peer>& PeerManager::GetPeers() const 
+const std::unordered_map<PeerId, Peer>& PeerManager::GetPeers() const
 {
 	return _peers;
 }
 
-PeerId PeerManager::AllocateId() 
+PeerId PeerManager::AllocateId()
 {
 	if (_freeIds.size())
 	{
@@ -148,7 +148,7 @@ PeerId PeerManager::AllocateId()
 	return _nextId++;
 }
 
-void PeerManager::FreeId(const PeerId peerId) 
+void PeerManager::FreeId(const PeerId peerId)
 {
 	if (peerId == 0)
 	{

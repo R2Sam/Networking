@@ -7,7 +7,6 @@
 
 #include <queue>
 
-
 struct _ENetHost;
 struct _ENetEvent;
 

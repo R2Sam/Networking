@@ -2,7 +2,7 @@
 
 #include "NetworkCore.h"
 
-template<class Archive>
+template <class Archive>
 void serialize(Archive& archive, Address& address)
 {
 	archive(address.ip, address.port);
@@ -23,7 +23,7 @@ struct Peer2PeerPacket
 	Address address;
 	std::vector<std::pair<PeerId, Address>> hosts;
 
-	template<class Archive>
+	template <class Archive>
 	void serialize(Archive& archive)
 	{
 		archive(type, peer, address, hosts);

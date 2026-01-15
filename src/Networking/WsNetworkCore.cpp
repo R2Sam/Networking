@@ -3,26 +3,25 @@
 #include "ws.h"
 
 #include <charconv>
-#include <zlib.h>
 #include <cstring>
 #include <thread>
+#include <zlib.h>
 
-void WsNetworkCore::InitServer(const u16 port) 
+void WsNetworkCore::InitServer(const u16 port)
 {
-	ws_server server = 
+	ws_server server =
 	{
-		.host = "0.0.0.0",
-		.port = port,
-		.thread_loop = 1,
-		.timeout_ms = 5000,
-		.evs = {HandleConnect, HandleDisconnect, HandleReceive},
-		.context = this
-	};
+	.host = "0.0.0.0",
+	.port = port,
+	.thread_loop = 1,
+	.timeout_ms = 5000,
+	.evs = {HandleConnect, HandleDisconnect, HandleReceive},
+	.context = this};
 
 	ws_socket(&server);
 }
 
-void WsNetworkCore::Disconnect(const PeerId peer) 
+void WsNetworkCore::Disconnect(const PeerId peer)
 {
 	Peer p = _peerManager.GetPeer(peer);
 	if (!p.id)
@@ -41,7 +40,8 @@ void WsNetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	{
 		_eventsMutex.unlock();
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));;
+		std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
+		;
 
 		_eventsMutex.lock();
 	}
@@ -52,7 +52,7 @@ void WsNetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	_eventsMutex.unlock();
 }
 
-bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data) 
+bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data)
 {
 	Peer p = _peerManager.GetPeer(peer);
 	if (!p.id)
@@ -65,7 +65,7 @@ bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data)
 	return result;
 }
 
-bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size) 
+bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size)
 {
 	Peer p = _peerManager.GetPeer(peer);
 	if (!p.id)
@@ -78,12 +78,12 @@ bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size)
 	return result;
 }
 
-Peer WsNetworkCore::GetPeer(const PeerId peer) 
+Peer WsNetworkCore::GetPeer(const PeerId peer)
 {
 	return _peerManager.GetPeer(peer);
 }
 
-void WsNetworkCore::HandleConnect(ws_cli_conn_t client) 
+void WsNetworkCore::HandleConnect(ws_cli_conn_t client)
 {
 	WsNetworkCore* context = (WsNetworkCore*)ws_get_server_context(client);
 
@@ -112,7 +112,7 @@ void WsNetworkCore::HandleConnect(ws_cli_conn_t client)
 	}
 }
 
-void WsNetworkCore::HandleDisconnect(ws_cli_conn_t client) 
+void WsNetworkCore::HandleDisconnect(ws_cli_conn_t client)
 {
 	WsNetworkCore* context = (WsNetworkCore*)ws_get_server_context(client);
 
@@ -132,7 +132,7 @@ void WsNetworkCore::HandleDisconnect(ws_cli_conn_t client)
 	context->_acceptedPeers.erase(peer.id);
 }
 
-void WsNetworkCore::HandleReceive(ws_cli_conn_t client, const u8* message, u64 messageSize, i32 type) 
+void WsNetworkCore::HandleReceive(ws_cli_conn_t client, const u8* message, u64 messageSize, i32 type)
 {
 	if ((type != WS_FR_OP_BIN && type != WS_FR_OP_TXT) || ws_get_state(client) != WS_STATE_OPEN)
 	{

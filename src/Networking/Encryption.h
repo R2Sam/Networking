@@ -4,27 +4,27 @@
 
 #include "Types.h"
 
-#include <string>
 #include <array>
+#include <string>
 
 using UUID = std::array<unsigned char, 16>;
 
 namespace std
 {
-    template<>
-    struct hash<std::array<unsigned char, 16>>
-    {
-        std::size_t operator()(const std::array<unsigned char, 16>& uuid) const noexcept
-        {
-            std::size_t h = 0;
-            for (auto b : uuid)
-            {
-                h = (h * 31) ^ b;
-            }
-            
-            return h;
-        }
-    };
+	template <>
+	struct hash<std::array<unsigned char, 16>>
+	{
+		std::size_t operator()(const std::array<unsigned char, 16>& uuid) const noexcept
+		{
+			std::size_t h = 0;
+			for (auto b : uuid)
+			{
+				h = (h * 31) ^ b;
+			}
+
+			return h;
+		}
+	};
 }
 
 extern unsigned char DefaultKey[crypto_secretbox_KEYBYTES];
