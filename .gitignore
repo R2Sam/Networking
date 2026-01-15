@@ -1,0 +1,16 @@
+*.exe
+bin/main
+bin/JunkyardBoyz
+*.o
+*.d
+*.sublime-project
+*.sublime-workspace
+*.res
+*build
+*.cache
+*.vscode
+*.bat
+*.sh
+*.py
+*.ini
+.*
