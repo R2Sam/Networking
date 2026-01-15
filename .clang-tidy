@@ -1,0 +1,39 @@
+Checks: >
+  -*,
+  clang-analyzer-*,
+  clang-diagnostic-*,
+  performance-*,
+  readability-*¨,
+  misc-*,
+  -misc-const-correctness,
+  -misc-include-cleaner,
+  -misc-unused-parameters,
+  readability-identifier-naming
+
+WarningsAsErrors: '*'
+
+ExtraArgs:
+  - -Wno-unused-command-line-argument
+  - -Wno-unused-parameter
+
+HeaderFilterRegex: '^$'
+
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: _
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
