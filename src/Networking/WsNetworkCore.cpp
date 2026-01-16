@@ -1,11 +1,11 @@
 #include "WsNetworkCore.h"
 
 #include "ws.h"
+#include "zlib/zlib.h"
 
 #include <charconv>
 #include <cstring>
 #include <thread>
-#include <zlib.h>
 
 void WsNetworkCore::InitServer(const u16 port)
 {
