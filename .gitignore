@@ -1,6 +1,7 @@
 *.exe
 bin/main
-bin/JunkyardBoyz
+bin/lib*
+docs
 *.o
 *.d
 *.sublime-project

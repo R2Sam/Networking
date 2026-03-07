@@ -1,19 +1,38 @@
 BasedOnStyle: Microsoft
+
+# Indentation settings
 IndentWidth: 4
 UseTab: Always
+ContinuationIndentWidth: 0
+ConstructorInitializerIndentWidth: 0
+PackConstructorInitializers: Never
+NamespaceIndentation: All
+AlignAfterOpenBracket: DontAlign
+LambdaBodyIndentation: OuterScope
+
+# Braces and line breaks
 BreakBeforeBraces: Allman
-ColumnLimit: 0
+BreakConstructorInitializers: AfterColon
+AlwaysBreakTemplateDeclarations: true
+BinPackParameters: true
+AllowAllArgumentsOnNextLine: false
+
+# Line length
+ColumnLimit: 120
+
+# Pointer and reference alignment
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Short statements/functions
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
-PointerAlignment: Left
-ReferenceAlignment: Left
-BreakConstructorInitializers: AfterColon
-ConstructorInitializerIndentWidth: 0
+AllowShortLambdasOnASingleLine: None
+
+# Access modifiers
 AccessModifierOffset: -4
 EmptyLineAfterAccessModifier: Always
-NamespaceIndentation: All
+
+# Namespace
 FixNamespaceComments: false
-AlignAfterOpenBracket: DontAlign
-ContinuationIndentWidth: 0
-LambdaBodyIndentation: OuterScope
