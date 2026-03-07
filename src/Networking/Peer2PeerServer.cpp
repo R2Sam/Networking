@@ -12,22 +12,22 @@
 
 Peer2PeerServer::Peer2PeerServer()
 {
-	_server.InitServer(1313, 100);
+	m_server.InitServer(1313, 100);
 }
 
 void Peer2PeerServer::Poll(const u32 timeoutMs)
 {
 	std::queue<NetworkEvent> events;
 
-	_server.Poll(events, timeoutMs);
+	m_server.Poll(events, timeoutMs);
 
-	while (events.size())
+	while (!events.empty())
 	{
 		NetworkEvent& event = events.front();
 
 		switch (event.type)
 		{
-		case NetworkEventType::Connect:
+		case NetworkEventType::CONNECT:
 		{
 			u32 data;
 			Assert(event.data.size() == sizeof(data), "memcpy size must match");
@@ -40,13 +40,13 @@ void Peer2PeerServer::Poll(const u32 timeoutMs)
 		}
 		break;
 
-		case NetworkEventType::Disconnect:
+		case NetworkEventType::DISCONNECT:
 		{
-			_hosts.erase(event.peer.id);
+			m_hosts.erase(event.peer.id);
 		}
 		break;
 
-		case NetworkEventType::Receive:
+		case NetworkEventType::RECEIVE:
 		{
 			Peer2PeerPacket packet = Deserialize<Peer2PeerPacket>(event.data);
 
@@ -64,21 +64,21 @@ void Peer2PeerServer::Poll(const u32 timeoutMs)
 
 void Peer2PeerServer::HandleHost(const PeerId peer)
 {
-	_hosts.emplace(peer);
+	m_hosts.emplace(peer);
 
-	Peer2PeerPacket packet{Peer2PeerPacketType::HostId, peer};
+	Peer2PeerPacket packet{Peer2PeerPacketType::HOST_ID, peer};
 
-	_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
+	m_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 }
 
 void Peer2PeerServer::HandleReceive(const PeerId peer, const Peer2PeerPacket& packet)
 {
-	if (packet.type == Peer2PeerPacketType::Request)
+	if (packet.type == Peer2PeerPacketType::REQUEST)
 	{
 		HandleRequest(peer, packet.peer);
 	}
 
-	else if (packet.type == Peer2PeerPacketType::Hosts)
+	else if (packet.type == Peer2PeerPacketType::HOSTS)
 	{
 		HandleList(peer);
 	}
@@ -86,34 +86,35 @@ void Peer2PeerServer::HandleReceive(const PeerId peer, const Peer2PeerPacket& pa
 
 void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 {
-	if (_hosts.find(target) == _hosts.end())
+	if (m_hosts.find(target) == m_hosts.end())
 	{
-		Peer2PeerPacket packet{Peer2PeerPacketType::Address, 0, Address()};
+		Peer2PeerPacket packet{Peer2PeerPacketType::ADDRESS, 0, Address()};
 
-		_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
+		m_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 		return;
 	}
 
-	Peer2PeerPacket hostPacket{Peer2PeerPacketType::Address, 0, _server.GetPeer(target).address};
+	Peer2PeerPacket hostPacket{Peer2PeerPacketType::ADDRESS, 0, m_server.GetPeer(target).address};
 	std::vector<u8> hostData = Serialize<Peer2PeerPacket>(hostPacket);
 
-	Peer2PeerPacket clientPacket{Peer2PeerPacketType::Address, 0, _server.GetPeer(peer).address};
+	Peer2PeerPacket clientPacket{Peer2PeerPacketType::ADDRESS, 0, m_server.GetPeer(peer).address};
 	std::vector<u8> clientData = Serialize<Peer2PeerPacket>(clientPacket);
 
-	_server.Send(peer, hostData);
-	_server.Send(target, clientData);
+	m_server.Send(peer, std::move(hostData));
+	m_server.Send(target, std::move(clientData));
 }
 
 void Peer2PeerServer::HandleList(const PeerId peer)
 {
 	std::vector<std::pair<PeerId, Address>> hosts;
 
-	for (const PeerId id : _hosts)
+	hosts.reserve(m_hosts.size());
+	for (const PeerId id : m_hosts)
 	{
-		hosts.emplace_back(id, _server.GetPeer(id).address);
+		hosts.emplace_back(id, m_server.GetPeer(id).address);
 	}
 
-	Peer2PeerPacket packet{Peer2PeerPacketType::Hosts, 0, Address(), hosts};
+	Peer2PeerPacket packet{Peer2PeerPacketType::HOSTS, 0, Address(), hosts};
 
-	_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
+	m_server.Send(peer, Serialize<Peer2PeerPacket>(packet));
 }

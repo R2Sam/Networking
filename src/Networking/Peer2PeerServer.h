@@ -22,9 +22,7 @@ private:
 	void HandleRequest(const PeerId peer, const PeerId target);
 	void HandleList(const PeerId peer);
 
-private:
+	NetworkCore m_server;
 
-	NetworkCore _server;
-
-	std::unordered_set<PeerId> _hosts;
+	std::unordered_set<PeerId> m_hosts;
 };

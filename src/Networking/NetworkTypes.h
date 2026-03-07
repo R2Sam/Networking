@@ -8,21 +8,21 @@
 using PeerId = u32;
 using ChannelId = u8;
 
-struct _ENetPeer;
+struct _ENetPeer; // NOLINT(readability-identifier-naming)
 using ws_cli_conn_t = u64;
 
 struct Address
 {
-	std::string ip = "";
+	std::string ip;
 	u16 port = 0;
 };
 
-enum class ConnectionState
+enum class ConnectionState : u8
 {
-	Connecting,
-	Connected,
-	Disconnecting,
-	Disconnected
+	CONNECTING,
+	CONNECTED,
+	DISCONNECTING,
+	DISCONNECTED
 };
 
 struct Peer
@@ -31,15 +31,15 @@ struct Peer
 	_ENetPeer* enetPeer = nullptr;
 	ws_cli_conn_t wsPeer = 0;
 	Address address;
-	ConnectionState state = ConnectionState::Disconnected;
+	ConnectionState state = ConnectionState::DISCONNECTED;
 };
 
-enum class NetworkEventType
+enum class NetworkEventType : u8
 {
-	Connect,
-	FailedConnection,
-	Disconnect,
-	Receive
+	CONNECT,
+	FAILED_CONNECTION,
+	DISCONNECT,
+	RECEIVE
 };
 
 struct NetworkEvent

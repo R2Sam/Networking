@@ -1,7 +1,7 @@
-#include "NetworkCore.h"
-
 #define ENET_IMPLEMENTATION
 #include "enet/enet.h"
+
+#include "NetworkCore.h"
 
 #include "zlib/zlib.h"
 
@@ -27,104 +27,110 @@ NetworkCore::~NetworkCore()
 
 bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 channels)
 {
-	if (_host)
+	if (m_host)
 	{
 		LogColor(LOG_RED, "Host already present");
 		return false;
 	}
 
+	Assert(port < 65000 && maxPeers < 4000 && channels < 255, "Port, maxPeers and channels must be in ranges");
+
 	_ENetAddress addr;
 	addr.host = ENET_HOST_ANY;
 	addr.port = port;
 
-	_host = enet_host_create(&addr, maxPeers, channels, 0, 0);
+	m_host = enet_host_create(&addr, maxPeers, channels, 0, 0);
 
-	if (!_host)
+	if (!m_host)
 	{
 		LogColor(LOG_RED, "Enet failed to create server at port: ", addr.port);
 		return false;
 	}
 
-	AddCompression(_host);
+	AddCompression(m_host);
 
 	return true;
 }
 
 bool NetworkCore::InitClient(const u32 channels)
 {
-	if (_host)
+	if (m_host)
 	{
 		LogColor(LOG_RED, "Host already present");
-		;
 		return false;
 	}
 
-	_host = enet_host_create(nullptr, 1, channels, 0, 0);
+	Assert(channels < 255, "Channels must be in ranges");
 
-	if (!_host)
+	m_host = enet_host_create(nullptr, 1, channels, 0, 0);
+
+	if (!m_host)
 	{
 		LogColor(LOG_RED, "Enet failed to create client");
 		return false;
 	}
 
-	AddCompression(_host);
+	AddCompression(m_host);
 
 	return true;
 }
 
 void NetworkCore::Shutdown()
 {
-	if (_host)
+	if (m_host)
 	{
-		enet_host_destroy(_host);
-		_host = nullptr;
+		enet_host_destroy(m_host);
+		m_host = nullptr;
 	}
 }
 
 Peer NetworkCore::Connect(const Address& address, const u32 data)
 {
-	if (!_host)
+	if (!m_host)
 	{
 		return {};
 	}
 
 	ENetAddress addr;
-	enet_address_set_host(&addr, address.ip.c_str());
+	if (enet_address_set_host(&addr, address.ip.c_str()) < 0)
+	{
+		LogColor(LOG_YELLOW, "Failed to resolve ip ", address.ip);
+	}
 	addr.port = address.port;
 
-	_ENetPeer* p = enet_host_connect(_host, &addr, _host->channelLimit, data);
+	_ENetPeer* p = enet_host_connect(m_host, &addr, m_host->channelLimit, data);
 	if (!p)
 	{
 		LogColor(LOG_YELLOW, "Failed to initialize connection to ", address.ip, ":", address.port);
 		return {};
 	}
 
-	Peer peer = _peerManager.AddPeer(p, address, ConnectionState::Connecting);
+	Peer peer = m_peerManager.AddPeer(p, address, ConnectionState::CONNECTING);
 
 	return peer;
 }
 
 void NetworkCore::Disconnect(const PeerId peerId, const u32 data)
 {
-	Peer peer = _peerManager.GetPeer(peerId);
+	Peer peer = m_peerManager.GetPeer(peerId);
 
 	if (!peer.enetPeer)
 	{
 		return;
 	}
 
-	peer.state = ConnectionState::Disconnecting;
+	peer.state = ConnectionState::DISCONNECTING;
 
 	enet_peer_disconnect(peer.enetPeer, data);
 }
 
 void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 {
-	Assert(_host, "Cannot poll without a host");
+	Assert(m_host, "Cannot poll without a host");
 
 	_ENetEvent event;
 
-	while (enet_host_service(_host, &event, timeoutMs) > 0)
+	while (enet_host_service(m_host, &event, timeoutMs) > 0)
 	{
 		switch (event.type)
 		{
@@ -149,14 +155,13 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 
 		default:
 			break;
-			;
 		}
 	}
 }
 
-bool NetworkCore::Send(const PeerId peerId, const std::vector<u8>& data, const ChannelId channel, const bool reliable)
+bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const ChannelId channel, const bool reliable)
 {
-	Peer peer = _peerManager.GetPeer(peerId);
+	Peer peer = m_peerManager.GetPeer(peerId);
 
 	if (!peer.enetPeer)
 	{
@@ -189,9 +194,10 @@ bool NetworkCore::Send(const PeerId peerId, const std::vector<u8>& data, const C
 	return true;
 }
 
-bool NetworkCore::Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel, const bool reliable)
+bool NetworkCore::Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel,
+const bool reliable)
 {
-	Peer peer = _peerManager.GetPeer(peerId);
+	Peer peer = m_peerManager.GetPeer(peerId);
 
 	if (!peer.enetPeer)
 	{
@@ -226,17 +232,17 @@ bool NetworkCore::Send(const PeerId peerId, const u8* data, const u32 size, cons
 
 Peer NetworkCore::GetPeer(const PeerId peerId) const
 {
-	return _peerManager.GetPeer(peerId);
+	return m_peerManager.GetPeer(peerId);
 }
 
 const std::unordered_map<PeerId, Peer>& NetworkCore::GetPeers() const
 {
-	return _peerManager.GetPeers();
+	return m_peerManager.GetPeers();
 }
 
 void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent>& events)
 {
-	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
+	Peer peer = m_peerManager.GetPeerEnet(event.peer->connectID);
 
 	if (!peer.enetPeer)
 	{
@@ -248,46 +254,46 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 		address.ip = hostBuf;
 		address.port = event.peer->address.port;
 
-		Peer newPeer = _peerManager.AddPeer(event.peer, address, ConnectionState::Connected);
+		Peer newPeer = m_peerManager.AddPeer(event.peer, address, ConnectionState::CONNECTED);
 
 		std::vector<u8> data(4);
 		Assert(sizeof(event.data) == data.size(), "memcpy size must match");
 		memcpy(data.data(), &event.data, data.size());
 
-		events.emplace(NetworkEventType::Connect, newPeer, 0, data);
+		events.emplace(NetworkEventType::CONNECT, newPeer, 0, data);
 	}
 
 	else
 	{
-		events.emplace(NetworkEventType::Connect, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<u8>());
 	}
 }
 
 void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEvent>& events)
 {
-	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
+	Peer peer = m_peerManager.GetPeerEnet(event.peer->connectID);
 
 	if (!peer.enetPeer)
 	{
 		return;
 	}
 
-	if (peer.state == ConnectionState::Connected)
+	if (peer.state == ConnectionState::CONNECTED)
 	{
-		events.emplace(NetworkEventType::Disconnect, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<u8>());
 	}
 
 	else
 	{
-		events.emplace(NetworkEventType::FailedConnection, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::FAILED_CONNECTION, peer, 0, std::vector<u8>());
 	}
 
-	_peerManager.RemovePeer(peer.id);
+	m_peerManager.RemovePeer(peer.id);
 }
 
 void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent>& events)
 {
-	Peer peer = _peerManager.GetPeerEnet(event.peer->connectID);
+	Peer peer = m_peerManager.GetPeerEnet(event.peer->connectID);
 
 	// Tough should we do something I don't think this is supposed to happen
 	if (!peer.enetPeer)
@@ -298,35 +304,43 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 	std::vector<u8> data(event.packet->data, event.packet->data + event.packet->dataLength);
 	enet_packet_destroy(event.packet);
 
-	events.emplace(NetworkEventType::Receive, peer, event.channelID, data);
+	events.emplace(NetworkEventType::RECEIVE, peer, event.channelID, data);
 }
 
-void NetworkCore::AddCompression(_ENetHost* const _host)
+static size_t Compress(void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit,
+unsigned char* output, size_t outputLimit);
+static size_t Decompress(void* context, const unsigned char* input, size_t inputLength, unsigned char* output,
+size_t outputLength);
+
+void NetworkCore::AddCompression(_ENetHost* const host)
 {
-	ENetCompressor zlibCompressor = {0,
-	[](void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit, unsigned char* output, size_t outputLimit)
+	ENetCompressor zlibCompressor = {0, &Compress, &Decompress, nullptr};
+
+	enet_host_compress(host, &zlibCompressor);
+}
+
+size_t Compress(void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit, unsigned char* output,
+size_t outputLimit)
+{
+	std::vector<u8> inputData(inputLimit);
+
+	size_t offset = 0;
+
+	for (size_t i = 0; i < bufferCount; ++i)
 	{
-		unsigned char* inputData = new unsigned char[inputLimit];
-		size_t offset = 0;
+		memcpy(inputData.data() + offset, buffers[i].data, buffers[i].dataLength);
+		offset += buffers[i].dataLength;
+	}
 
-		for (size_t i = 0; i < bufferCount; ++i)
-		{
-			memcpy(inputData + offset, buffers[i].data, buffers[i].dataLength);
-			offset += buffers[i].dataLength;
-		}
+	uLongf outputLength = outputLimit;
+	size_t result = compress2(output, &outputLength, inputData.data(), inputLimit, Z_BEST_SPEED);
+	return size_t(result == Z_OK ? outputLength : 0);
+}
 
-		uLongf outputLength = outputLimit;
-		size_t result = compress2(output, &outputLength, inputData, inputLimit, Z_BEST_SPEED);
-		return size_t(result == Z_OK ? outputLength : 0);
-	},
-
-	[](void* context, const unsigned char* input, size_t inputLength, unsigned char* output, size_t outputLength)
-	{
-		uLongf outputLengthULongf = outputLength;
-		u32 result = uncompress(output, &outputLengthULongf, input, inputLength);
-		return size_t(result == Z_OK);
-	},
-	nullptr};
-
-	enet_host_compress(_host, &zlibCompressor);
+size_t Decompress(void* context, const unsigned char* input, size_t inputLength, unsigned char* output,
+size_t outputLength)
+{
+	uLongf outputLengthULongf = outputLength;
+	u32 result = uncompress(output, &outputLengthULongf, input, inputLength);
+	return size_t(result == Z_OK);
 }

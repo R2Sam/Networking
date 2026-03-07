@@ -2,7 +2,7 @@
 
 #include "Log.h"
 
-#include "Core/Types.h"
+#include "Types.h"
 
 #include <deque>
 
@@ -10,72 +10,71 @@ class Timer
 {
 public:
 
-    Timer()
-    {
+	Timer()
+	{
+	}
 
-    }
+	Timer(const std::string& name)
+	{
+		m_name = name;
+		m_start = std::chrono::steady_clock::now();
+	}
 
-    Timer(const std::string& nameIn)
-    {
-        name = nameIn;
-        start = std::chrono::steady_clock::now();
-    }
+	~Timer()
+	{
+		if (!m_done)
+		{
+			Stop();
+		}
+	}
 
-    ~Timer()
-    {
-        if (!done)
-        {
-            Stop();
-        }
-    }
+	void Start()
+	{
+		Start("");
+	}
 
-    inline void Start()
-    {
-        Start("");
-    }
+	void Start(const std::string& name)
+	{
+		Stop();
 
-    inline void Start(const std::string& nameIn)
-    {
-        Stop();
+		m_name = name;
+		m_start = std::chrono::steady_clock::now();
 
-        name = nameIn;
-        start = std::chrono::steady_clock::now();
+		m_done = false;
+	}
 
-        done = false;
-    }
+	double Stop()
+	{
+		return Stop("");
+	}
 
-    inline double Stop()
-    {
-        return Stop("");
-    }
+	double Stop(const std::string& text)
+	{
+		if (m_done)
+		{
+			return 0.0;
+		}
 
-    inline double Stop(const std::string& text)
-    {
-        if (done)
-        {
-            return 0.0;
-        }
+		m_end = std::chrono::steady_clock::now();
+		m_done = true;
 
-        end = std::chrono::steady_clock::now();
-        done = true;
+		double microseconds = std::chrono::duration_cast<std::chrono::microseconds>(m_end - m_start).count();
+		if (!m_name.empty())
+		{
+			Log(m_name, " took: ", microseconds * 0.001, " ms ", text);
+		}
 
-        double microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        if (name.size())
-        {
-            Log(name, " took: ", microseconds * 0.001, " ms ", text);
-        }
-        
-        return microseconds * 0.001;
-    }
+		return microseconds * 0.001;
+	}
 
 private:
 
-    std::chrono::time_point<std::chrono::steady_clock> start;
-    std::chrono::time_point<std::chrono::steady_clock> end;
+	std::chrono::time_point<std::chrono::steady_clock> m_start;
+	std::chrono::time_point<std::chrono::steady_clock> m_end;
 
-    bool done = true;
+	bool m_done = true;
 
-    std::string name;
+	std::string m_name;
 };
 
 template <typename T>
@@ -83,45 +82,45 @@ class RollingAverage
 {
 public:
 
-    RollingAverage(const u64 samples = 100)
-    {
-        _sampleCount = samples;
-    }
+	RollingAverage(const u64 samples = 100)
+	{
+		m_sampleCount = samples;
+	}
 
-    inline void Add(const T value)
-    {
-        _samples.push_back(value);
+	void Add(const T value)
+	{
+		m_samples.push_back(value);
 
-        if (_samples.size() > _sampleCount)
-        {
-            _samples.pop_front();
-        }
-    }
+		if (m_samples.size() > m_sampleCount)
+		{
+			m_samples.pop_front();
+		}
+	}
 
-    inline void operator+=(const T value)
-    {
-        Add(value);
-    }
+	void operator+=(const T value)
+	{
+		Add(value);
+	}
 
-    inline T Average() const
-    {
-        if (_samples.empty())
-        {
-            return 0;
-        }
+	T Average() const
+	{
+		if (m_samples.empty())
+		{
+			return 0;
+		}
 
-        T sum = 0;
+		T sum = 0;
 
-        for (const float value : _samples)
-        {
-            sum += value;
-        }
+		for (const float value : m_samples)
+		{
+			sum += value;
+		}
 
-        return sum / _samples.size();
-    }
+		return sum / m_samples.size();
+	}
 
 private:
 
-    std::deque<T> _samples;
-    u64 _sampleCount;
+	std::deque<T> m_samples;
+	u64 m_sampleCount;
 };

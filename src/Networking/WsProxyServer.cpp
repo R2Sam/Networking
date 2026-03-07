@@ -5,8 +5,8 @@
 
 WsProxyServer::WsProxyServer(const u16 port)
 {
-	_enetCore.InitServer(port, 8);
-	_wsCore.InitServer(port);
+	m_enetCore.InitServer(port, 8);
+	m_wsCore.InitServer(port);
 }
 
 void WsProxyServer::Update()
@@ -14,8 +14,8 @@ void WsProxyServer::Update()
 	std::queue<NetworkEvent> enetEvents;
 	std::queue<NetworkEvent> wsEvents;
 
-	_enetCore.Poll(enetEvents, 5);
-	_wsCore.Poll(wsEvents, 5);
+	m_enetCore.Poll(enetEvents, 5);
+	m_wsCore.Poll(wsEvents, 5);
 
 	HandleEnet(enetEvents);
 	HandleWs(wsEvents);
@@ -23,37 +23,37 @@ void WsProxyServer::Update()
 
 void WsProxyServer::HandleEnet(std::queue<NetworkEvent>& events)
 {
-	while (events.size())
+	while (!events.empty())
 	{
 		NetworkEvent& event = events.front();
 
 		switch (event.type)
 		{
-		case NetworkEventType::Connect:
+		case NetworkEventType::CONNECT:
 		{
-			_enetPeers.emplace(event.peer.id, "");
+			m_enetPeers.emplace(event.peer.id, "");
 		}
 		break;
 
-		case NetworkEventType::Disconnect:
+		case NetworkEventType::DISCONNECT:
 		{
-			for (auto& pair : _wsPeers)
+			for (auto& pair : m_wsPeers)
 			{
 				if (pair.second == event.peer.id)
 				{
-					_wsCore.Disconnect(pair.first);
+					m_wsCore.Disconnect(pair.first);
 				}
 			}
 
-			_enetPeers.erase(event.peer.id);
+			m_enetPeers.erase(event.peer.id);
 		}
 		break;
 
-		case NetworkEventType::Receive:
+		case NetworkEventType::RECEIVE:
 		{
-			if (_enetPeers[event.peer.id].empty())
+			if (m_enetPeers[event.peer.id].empty())
 			{
-				_enetPeers[event.peer.id].assign(event.data.begin(), event.data.end());
+				m_enetPeers[event.peer.id].assign(event.data.begin(), event.data.end());
 				break;
 			}
 
@@ -68,17 +68,19 @@ void WsProxyServer::HandleEnet(std::queue<NetworkEvent>& events)
 
 			// Make sure that the peer exists
 			// and sure that the peer is even interested in us
-			auto it = _wsPeers.find(targetPeer);
-			if (it == _wsPeers.end() || it->second != event.peer.id)
+			auto it = m_wsPeers.find(targetPeer);
+			if (it == m_wsPeers.end() || it->second != event.peer.id)
 			{
 
-				_enetCore.Send(event.peer.id, event.data.data(), sizeof(targetPeer));
+				m_enetCore.Send(event.peer.id, event.data.data(), sizeof(targetPeer));
 				break;
 			}
 
-			_wsCore.Send(targetPeer, event.data.data() + sizeof(targetPeer), event.data.size() - sizeof(targetPeer));
+			m_wsCore.Send(targetPeer, event.data.data() + sizeof(targetPeer), event.data.size() - sizeof(targetPeer));
 		}
 		break;
+		default:
+			break;
 		}
 
 		events.pop();
@@ -87,57 +89,57 @@ void WsProxyServer::HandleEnet(std::queue<NetworkEvent>& events)
 
 void WsProxyServer::HandleWs(std::queue<NetworkEvent>& events)
 {
-	while (events.size())
+	while (!events.empty())
 	{
 		NetworkEvent& event = events.front();
 
 		switch (event.type)
 		{
-		case NetworkEventType::Connect:
+		case NetworkEventType::CONNECT:
 		{
-			_wsPeers.emplace(event.peer.id, 0);
+			m_wsPeers.emplace(event.peer.id, 0);
 		}
 		break;
 
-		case NetworkEventType::Disconnect:
+		case NetworkEventType::DISCONNECT:
 		{
-			if (_wsPeers[event.peer.id])
+			if (m_wsPeers[event.peer.id])
 			{
-				_enetCore.Send(_wsPeers[event.peer.id], (u8*)&event.peer.id, sizeof(event.peer.id));
+				m_enetCore.Send(m_wsPeers[event.peer.id], (u8*)&event.peer.id, sizeof(event.peer.id));
 			}
 
-			_wsPeers.erase(event.peer.id);
+			m_wsPeers.erase(event.peer.id);
 		}
 		break;
 
-		case NetworkEventType::Receive:
+		case NetworkEventType::RECEIVE:
 		{
 			// If it doesn't have a pair look for it
-			if (!_wsPeers[event.peer.id])
+			if (!m_wsPeers[event.peer.id])
 			{
-				for (const auto& pair : _enetPeers)
+				for (const auto& pair : m_enetPeers)
 				{
 					if (pair.second == std::string(event.data.begin(), event.data.end()))
 					{
-						_wsPeers[event.peer.id] = pair.first;
+						m_wsPeers[event.peer.id] = pair.first;
 						break;
 					}
 				}
 
 				// If no pair found
-				if (!_wsPeers[event.peer.id])
+				if (!m_wsPeers[event.peer.id])
 				{
-					_wsCore.Disconnect(event.peer.id);
+					m_wsCore.Disconnect(event.peer.id);
 				}
 
 				break;
 			}
 
 			// Make sure it's pair is still connected
-			auto it = _enetPeers.find(_wsPeers[event.peer.id]);
-			if (it == _enetPeers.end())
+			auto it = m_enetPeers.find(m_wsPeers[event.peer.id]);
+			if (it == m_enetPeers.end())
 			{
-				_wsCore.Disconnect(event.peer.id);
+				m_wsCore.Disconnect(event.peer.id);
 				break;
 			}
 
@@ -145,9 +147,12 @@ void WsProxyServer::HandleWs(std::queue<NetworkEvent>& events)
 			memcpy(data.data(), &event.peer.id, sizeof(event.peer.id));
 			data.insert(data.end(), std::move_iterator(event.data.begin()), std::move_iterator(event.data.end()));
 
-			_enetCore.Send(_wsPeers[event.peer.id], data);
+			m_enetCore.Send(m_wsPeers[event.peer.id], std::move(data));
 		}
 		break;
+
+		default:
+			break;
 		}
 
 		events.pop();

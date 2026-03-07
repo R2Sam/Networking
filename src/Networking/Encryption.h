@@ -27,7 +27,7 @@ namespace std
 	};
 }
 
-extern unsigned char DefaultKey[crypto_secretbox_KEYBYTES];
+extern unsigned char defaultKey[crypto_secretbox_KEYBYTES];
 
 namespace Encryption
 {

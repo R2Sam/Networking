@@ -9,7 +9,7 @@
 #include <queue>
 #include <unordered_set>
 
-constexpr std::string MagicCode = "supersecretcode";
+constexpr std::string MAGIC_CODE = "supersecretcode";
 
 using ws_cli_conn_t = u64;
 
@@ -34,12 +34,10 @@ private:
 	static void HandleDisconnect(ws_cli_conn_t client);
 	static void HandleReceive(ws_cli_conn_t client, const u8* message, u64 messageSize, i32 type);
 
-private:
+	std::mutex m_eventsMutex;
+	std::queue<NetworkEvent> m_events;
 
-	std::mutex _eventsMutex;
-	std::queue<NetworkEvent> _events;
+	std::unordered_set<PeerId> m_acceptedPeers;
 
-	std::unordered_set<PeerId> _acceptedPeers;
-
-	PeerManager _peerManager;
+	PeerManager m_peerManager;
 };

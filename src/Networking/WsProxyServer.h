@@ -16,11 +16,9 @@ private:
 	void HandleEnet(std::queue<NetworkEvent>& events);
 	void HandleWs(std::queue<NetworkEvent>& events);
 
-private:
+	NetworkCore m_enetCore;
+	WsNetworkCore m_wsCore;
 
-	NetworkCore _enetCore;
-	WsNetworkCore _wsCore;
-
-	std::unordered_map<PeerId, std::string> _enetPeers;
-	std::unordered_map<PeerId, PeerId> _wsPeers;
+	std::unordered_map<PeerId, std::string> m_enetPeers;
+	std::unordered_map<PeerId, PeerId> m_wsPeers;
 };

@@ -1,19 +1,19 @@
 #pragma once
 
-#include "NetworkCore.h"
+#include "Networking/NetworkTypes.h"
 
 template <class Archive>
-void serialize(Archive& archive, Address& address)
+void serialize(Archive& archive, Address& address) // NOLINT(readability-identifier-naming)
 {
 	archive(address.ip, address.port);
 }
 
-enum class Peer2PeerPacketType
+enum class Peer2PeerPacketType : u8
 {
-	HostId,
-	Request,
-	Address,
-	Hosts
+	HOST_ID,
+	REQUEST,
+	ADDRESS,
+	HOSTS
 };
 
 struct Peer2PeerPacket
@@ -24,7 +24,7 @@ struct Peer2PeerPacket
 	std::vector<std::pair<PeerId, Address>> hosts;
 
 	template <class Archive>
-	void serialize(Archive& archive)
+	void serialize(Archive& archive) // NOLINT(readability-identifier-naming)
 	{
 		archive(type, peer, address, hosts);
 	}

@@ -24,13 +24,11 @@ private:
 	PeerId AllocateId();
 	void FreeId(const PeerId peerId);
 
-private:
+	PeerId m_nextId = 1;
+	std::queue<PeerId> m_freeIds;
 
-	PeerId _nextId = 1;
-	std::queue<PeerId> _freeIds;
+	std::unordered_map<PeerId, Peer> m_peers;
 
-	std::unordered_map<PeerId, Peer> _peers;
-
-	std::unordered_map<u32, PeerId> _enetIds;
-	std::unordered_map<ws_cli_conn_t, PeerId> _wsIds;
+	std::unordered_map<u32, PeerId> m_enetIds;
+	std::unordered_map<ws_cli_conn_t, PeerId> m_wsIds;
 };

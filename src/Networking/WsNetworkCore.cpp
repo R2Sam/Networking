@@ -9,9 +9,7 @@
 
 void WsNetworkCore::InitServer(const u16 port)
 {
-	ws_server server =
-	{
-	.host = "0.0.0.0",
+	ws_server server = {.host = "0.0.0.0",
 	.port = port,
 	.thread_loop = 1,
 	.timeout_ms = 5000,
@@ -23,7 +21,7 @@ void WsNetworkCore::InitServer(const u16 port)
 
 void WsNetworkCore::Disconnect(const PeerId peer)
 {
-	Peer p = _peerManager.GetPeer(peer);
+	Peer p = m_peerManager.GetPeer(peer);
 	if (!p.id)
 	{
 		return;
@@ -34,27 +32,27 @@ void WsNetworkCore::Disconnect(const PeerId peer)
 
 void WsNetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 {
-	_eventsMutex.lock();
+	m_eventsMutex.lock();
 
-	if (timeoutMs && _events.empty())
+	if (timeoutMs && m_events.empty())
 	{
-		_eventsMutex.unlock();
+		m_eventsMutex.unlock();
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
 		;
 
-		_eventsMutex.lock();
+		m_eventsMutex.lock();
 	}
 
-	events = std::move(_events);
-	_events = std::queue<NetworkEvent>();
+	events = std::move(m_events);
+	m_events = std::queue<NetworkEvent>();
 
-	_eventsMutex.unlock();
+	m_eventsMutex.unlock();
 }
 
 bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data)
 {
-	Peer p = _peerManager.GetPeer(peer);
+	Peer p = m_peerManager.GetPeer(peer);
 	if (!p.id)
 	{
 		return false;
@@ -67,7 +65,7 @@ bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data)
 
 bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size)
 {
-	Peer p = _peerManager.GetPeer(peer);
+	Peer p = m_peerManager.GetPeer(peer);
 	if (!p.id)
 	{
 		return false;
@@ -80,14 +78,14 @@ bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size)
 
 Peer WsNetworkCore::GetPeer(const PeerId peer)
 {
-	return _peerManager.GetPeer(peer);
+	return m_peerManager.GetPeer(peer);
 }
 
 void WsNetworkCore::HandleConnect(ws_cli_conn_t client)
 {
 	WsNetworkCore* context = (WsNetworkCore*)ws_get_server_context(client);
 
-	Peer peer = context->_peerManager.GetPeerWs(client);
+	Peer peer = context->m_peerManager.GetPeerWs(client);
 
 	if (!peer.enetPeer)
 	{
@@ -97,18 +95,18 @@ void WsNetworkCore::HandleConnect(ws_cli_conn_t client)
 		char* portString = ws_getport(client);
 		std::from_chars(portString, portString + 32, address.port);
 
-		Peer newPeer = context->_peerManager.AddPeer(client, address, ConnectionState::Connected);
+		Peer newPeer = context->m_peerManager.AddPeer(client, address, ConnectionState::CONNECTED);
 
-		context->_eventsMutex.lock();
+		context->m_eventsMutex.lock();
 
-		context->_events.emplace(NetworkEventType::Connect, newPeer, 0, std::vector<u8>());
+		context->m_events.emplace(NetworkEventType::CONNECT, newPeer, 0, std::vector<u8>());
 
-		context->_eventsMutex.unlock();
+		context->m_eventsMutex.unlock();
 	}
 
 	else
 	{
-		context->_events.emplace(NetworkEventType::Connect, peer, 0, std::vector<u8>());
+		context->m_events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<u8>());
 	}
 }
 
@@ -116,20 +114,20 @@ void WsNetworkCore::HandleDisconnect(ws_cli_conn_t client)
 {
 	WsNetworkCore* context = (WsNetworkCore*)ws_get_server_context(client);
 
-	Peer peer = context->_peerManager.GetPeerWs(client);
+	Peer peer = context->m_peerManager.GetPeerWs(client);
 
-	if (peer.state == ConnectionState::Connected)
+	if (peer.state == ConnectionState::CONNECTED)
 	{
-		context->_eventsMutex.lock();
+		context->m_eventsMutex.lock();
 
-		context->_events.emplace(NetworkEventType::Disconnect, peer, 0, std::vector<u8>());
+		context->m_events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<u8>());
 
-		context->_eventsMutex.unlock();
+		context->m_eventsMutex.unlock();
 	}
 
-	context->_peerManager.RemovePeer(peer.id);
+	context->m_peerManager.RemovePeer(peer.id);
 
-	context->_acceptedPeers.erase(peer.id);
+	context->m_acceptedPeers.erase(peer.id);
 }
 
 void WsNetworkCore::HandleReceive(ws_cli_conn_t client, const u8* message, u64 messageSize, i32 type)
@@ -141,26 +139,26 @@ void WsNetworkCore::HandleReceive(ws_cli_conn_t client, const u8* message, u64 m
 
 	WsNetworkCore* context = (WsNetworkCore*)ws_get_server_context(client);
 
-	Peer peer = context->_peerManager.GetPeerWs(client);
+	Peer peer = context->m_peerManager.GetPeerWs(client);
 
-	if (context->_acceptedPeers.find(peer.id) == context->_acceptedPeers.end())
+	if (context->m_acceptedPeers.find(peer.id) == context->m_acceptedPeers.end())
 	{
-		if (std::string(message, message + messageSize) != MagicCode)
+		if (std::string(message, message + messageSize) != MAGIC_CODE)
 		{
 			ws_close_client(client);
 			return;
 		}
 
-		context->_acceptedPeers.emplace(peer.id);
+		context->m_acceptedPeers.emplace(peer.id);
 
 		return;
 	}
 
 	std::vector<u8> data(message, message + messageSize);
 
-	context->_eventsMutex.lock();
+	context->m_eventsMutex.lock();
 
-	context->_events.emplace(NetworkEventType::Receive, peer, 0, data);
+	context->m_events.emplace(NetworkEventType::RECEIVE, peer, 0, data);
 
-	context->_eventsMutex.unlock();
+	context->m_eventsMutex.unlock();
 }

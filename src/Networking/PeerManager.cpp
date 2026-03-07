@@ -14,11 +14,11 @@ Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const Con
 	peer.address = address;
 	peer.state = state;
 
-	_peers.emplace(id, peer);
+	m_peers.emplace(id, peer);
 
 	Assert(enetPeer, "Cannot pass an invalid enetPeer");
 
-	_enetIds.emplace(enetPeer->connectID, id);
+	m_enetIds.emplace(enetPeer->connectID, id);
 
 	return peer;
 }
@@ -33,9 +33,9 @@ Peer PeerManager::AddPeer(const ws_cli_conn_t wsPeer, const Address& address, co
 	peer.address = address;
 	peer.state = state;
 
-	_peers.emplace(id, std::move(peer));
+	m_peers.emplace(id, std::move(peer));
 
-	_wsIds.emplace(wsPeer, id);
+	m_wsIds.emplace(wsPeer, id);
 
 	return peer;
 }
@@ -47,19 +47,22 @@ void PeerManager::RemovePeer(const PeerId peerId)
 		return;
 	}
 
-	auto it = _peers.find(peerId);
-	if (it != _peers.end())
+	auto it = m_peers.find(peerId);
+	if (it != m_peers.end())
 	{
 		Peer peer = it->second;
 
-		_enetIds.erase(peer.enetPeer->connectID);
-		_wsIds.erase(peer.wsPeer);
+		if (peer.enetPeer)
+		{
+			m_enetIds.erase(peer.enetPeer->connectID);
+		}
+		m_wsIds.erase(peer.wsPeer);
 	}
 
 	else
 	{
 		u32 enetId = 0;
-		for (const auto pair : _enetIds)
+		for (const auto pair : m_enetIds)
 		{
 			if (pair.second == peerId)
 			{
@@ -67,10 +70,10 @@ void PeerManager::RemovePeer(const PeerId peerId)
 			}
 		}
 
-		_enetIds.erase(enetId);
+		m_enetIds.erase(enetId);
 
 		ws_cli_conn_t wsId = 0;
-		for (const auto pair : _wsIds)
+		for (const auto pair : m_wsIds)
 		{
 			if (pair.second == peerId)
 			{
@@ -78,74 +81,65 @@ void PeerManager::RemovePeer(const PeerId peerId)
 			}
 		}
 
-		_wsIds.erase(wsId);
+		m_wsIds.erase(wsId);
 	}
 
+	m_peers.erase(it);
 	FreeId(peerId);
-	_peers.erase(it);
 }
 
 Peer PeerManager::GetPeer(const PeerId peerId) const
 {
-	auto it = _peers.find(peerId);
-	if (it != _peers.end())
+	auto it = m_peers.find(peerId);
+	if (it != m_peers.end())
 	{
 		return it->second;
 	}
 
-	else
-	{
-		Peer p;
-		return p;
-	}
+	Peer p;
+	return p;
 }
 
 Peer PeerManager::GetPeerEnet(const u32 enetPeerId) const
 {
-	auto it = _enetIds.find(enetPeerId);
-	if (it != _enetIds.end())
+	auto it = m_enetIds.find(enetPeerId);
+	if (it != m_enetIds.end())
 	{
 		return GetPeer(it->second);
 	}
 
-	else
-	{
-		Peer p;
-		return p;
-	}
+	Peer p;
+	return p;
 }
 
 Peer PeerManager::GetPeerWs(const ws_cli_conn_t wsPeer) const
 {
-	auto it = _wsIds.find(wsPeer);
-	if (it != _wsIds.end())
+	auto it = m_wsIds.find(wsPeer);
+	if (it != m_wsIds.end())
 	{
 		return GetPeer(it->second);
 	}
 
-	else
-	{
-		Peer peer;
-		return peer;
-	}
+	Peer peer;
+	return peer;
 }
 
 const std::unordered_map<PeerId, Peer>& PeerManager::GetPeers() const
 {
-	return _peers;
+	return m_peers;
 }
 
 PeerId PeerManager::AllocateId()
 {
-	if (_freeIds.size())
+	if (!m_freeIds.empty())
 	{
-		PeerId id = _freeIds.back();
-		_freeIds.pop();
+		PeerId id = m_freeIds.back();
+		m_freeIds.pop();
 
 		return id;
 	}
 
-	return _nextId++;
+	return m_nextId++;
 }
 
 void PeerManager::FreeId(const PeerId peerId)
@@ -155,5 +149,5 @@ void PeerManager::FreeId(const PeerId peerId)
 		return;
 	}
 
-	_freeIds.push(peerId);
+	m_freeIds.push(peerId);
 }
