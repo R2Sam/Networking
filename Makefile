@@ -11,6 +11,10 @@ debug:
 release:
 	mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && $(MAKE) -j${JOBS} -s
 
+test:
+	mkdir -p build && cmake -B build -DFETCHCONTENT_BASE_DIR=../.deps -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON  && cd build && $(MAKE) -j${JOBS} -s
+	cd bin && ./networking_tests
+
 clear:
 	-mv build/compile_commands.json compile_commands.json
 	-rm -r build

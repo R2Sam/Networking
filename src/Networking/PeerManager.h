@@ -11,13 +11,14 @@ public:
 
 	Peer AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state);
 	Peer AddPeer(const ws_cli_conn_t wsPeer, const Address& address, const ConnectionState state);
+	bool EditPeer(const Peer& peer);
 	void RemovePeer(const PeerId peerId);
 
 	Peer GetPeer(const PeerId peerId) const;
 	Peer GetPeerEnet(const u32 enetPeerId) const;
 	Peer GetPeerWs(const ws_cli_conn_t wsPeer) const;
 
-	const std::unordered_map<PeerId, Peer>& GetPeers() const;
+	std::unordered_map<PeerId, Peer> GetPeers() const;
 
 private:
 

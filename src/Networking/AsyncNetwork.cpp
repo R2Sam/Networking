@@ -2,6 +2,8 @@
 #include "Networking/NetworkTypes.h"
 #include <thread>
 
+#include "Log/Log.h"
+
 AsyncNetwork::AsyncNetwork()
 {
 }
@@ -22,9 +24,9 @@ bool AsyncNetwork::InitServer(const u16 port, const u32 maxPeers, const u32 chan
 	return m_core.InitServer(port, maxPeers, channels);
 }
 
-bool AsyncNetwork::InitClient(const u32 channels)
+bool AsyncNetwork::InitClient(const u32 maxPeers, const u32 channels)
 {
-	return m_core.InitClient(channels);
+	return m_core.InitClient(maxPeers, channels);
 }
 
 void AsyncNetwork::Start()
@@ -44,6 +46,8 @@ void AsyncNetwork::Stop()
 	{
 		return;
 	}
+
+	m_running = false;
 
 	if (m_thread.joinable())
 	{
@@ -84,12 +88,12 @@ void AsyncNetwork::Loop()
 
 	while (m_running)
 	{
-		static std::queue<NetworkEvent> s_events;
-		m_core.Poll(s_events, timeoutMs);
-		while (!s_events.empty())
+		std::queue<NetworkEvent> events;
+		m_core.Poll(events, timeoutMs);
+		while (!events.empty())
 		{
-			m_eventQueue.enqueue(std::move(s_events.front()));
-			s_events.pop();
+			m_eventQueue.enqueue(events.front());
+			events.pop();
 		}
 
 		Command command;

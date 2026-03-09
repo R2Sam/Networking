@@ -16,7 +16,7 @@ public:
 	~AsyncNetwork();
 
 	bool InitServer(const u16 port, const u32 maxPeers = 64, const u32 channels = 1);
-	bool InitClient(const u32 channels = 1);
+	bool InitClient(const u32 maxPeers = 64, const u32 channels = 1);
 	void ShutDown();
 
 	void Start();

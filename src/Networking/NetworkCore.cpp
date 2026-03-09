@@ -8,21 +8,34 @@
 #include "Assert.h"
 #include "Log/Log.h"
 
+#include <atomic>
 #include <cstring>
+
+static std::atomic<u32> sInstances = 0;
 
 NetworkCore::NetworkCore()
 {
-	if (enet_initialize())
+	if (!sInstances)
 	{
-		LogColor(LOG_YELLOW, "Failed to initialize enet");
+		if (enet_initialize())
+		{
+			LogColor(LOG_YELLOW, "Failed to initialize enet");
+		}
 	}
+
+	++sInstances;
 }
 
 NetworkCore::~NetworkCore()
 {
 	Shutdown();
 
-	enet_deinitialize();
+	--sInstances;
+
+	if (!sInstances)
+	{
+		enet_deinitialize();
+	}
 }
 
 bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 channels)
@@ -52,7 +65,7 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 	return true;
 }
 
-bool NetworkCore::InitClient(const u32 channels)
+bool NetworkCore::InitClient(const u32 maxPeers, const u32 channels)
 {
 	if (m_host)
 	{
@@ -60,9 +73,9 @@ bool NetworkCore::InitClient(const u32 channels)
 		return false;
 	}
 
-	Assert(channels < 255, "Channels must be in ranges");
+	Assert(maxPeers < 4000 && channels < 255, "MaxPeers and channels must be in ranges");
 
-	m_host = enet_host_create(nullptr, 1, channels, 0, 0);
+	m_host = enet_host_create(nullptr, maxPeers, channels, 0, 0);
 
 	if (!m_host)
 	{
@@ -157,6 +170,15 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 			break;
 		}
 	}
+
+	for (u32 i = 0; i < m_host->peerCount; ++i)
+	{
+		ENetPeer enetPeer = m_host->peers[i];
+
+		Peer peer = m_peerManager.GetPeerEnet(enetPeer.connectID);
+		peer.pingMs = enetPeer.roundTripTime;
+		m_peerManager.EditPeer(peer);
+	}
 }
 
 bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const ChannelId channel, const bool reliable)
@@ -235,7 +257,7 @@ Peer NetworkCore::GetPeer(const PeerId peerId) const
 	return m_peerManager.GetPeer(peerId);
 }
 
-const std::unordered_map<PeerId, Peer>& NetworkCore::GetPeers() const
+std::unordered_map<PeerId, Peer> NetworkCore::GetPeers() const
 {
 	return m_peerManager.GetPeers();
 }
@@ -265,6 +287,8 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 
 	else
 	{
+		peer.state = ConnectionState::CONNECTED;
+		m_peerManager.EditPeer(peer);
 		events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<u8>());
 	}
 }
@@ -278,14 +302,14 @@ void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEv
 		return;
 	}
 
-	if (peer.state == ConnectionState::CONNECTED)
+	if (peer.state == ConnectionState::CONNECTING)
 	{
-		events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::FAILED_CONNECTION, peer, 0, std::vector<u8>());
 	}
 
 	else
 	{
-		events.emplace(NetworkEventType::FAILED_CONNECTION, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<u8>());
 	}
 
 	m_peerManager.RemovePeer(peer.id);

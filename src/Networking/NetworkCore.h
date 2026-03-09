@@ -18,7 +18,7 @@ public:
 	~NetworkCore();
 
 	bool InitServer(const u16 port, const u32 maxPeers = 64, const u32 channels = 1);
-	bool InitClient(const u32 channels = 1);
+	bool InitClient(const u32 maxPeers = 64, const u32 channels = 1);
 	void Shutdown();
 
 	Peer Connect(const Address& address, const u32 data = 0);
@@ -30,7 +30,7 @@ public:
 	const bool reliable = true);
 
 	Peer GetPeer(const PeerId peerId) const;
-	const std::unordered_map<PeerId, Peer>& GetPeers() const;
+	std::unordered_map<PeerId, Peer> GetPeers() const;
 
 private:
 

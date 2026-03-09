@@ -31,6 +31,7 @@ struct Peer
 	_ENetPeer* enetPeer = nullptr;
 	ws_cli_conn_t wsPeer = 0;
 	Address address;
+	u32 pingMs = 0;
 	ConnectionState state = ConnectionState::DISCONNECTED;
 };
 
@@ -44,9 +45,9 @@ enum class NetworkEventType : u8
 
 struct NetworkEvent
 {
-	NetworkEventType type;
+	NetworkEventType type = NetworkEventType::CONNECT;
 	Peer peer;
-	ChannelId channel;
+	ChannelId channel = 0;
 	std::vector<u8> data;
 
 	NetworkEvent(const NetworkEventType type, const Peer& peer, const ChannelId channel, const std::vector<u8>& data) :
@@ -54,6 +55,10 @@ struct NetworkEvent
 	peer(peer),
 	channel(channel),
 	data(data)
+	{
+	}
+
+	NetworkEvent()
 	{
 	}
 };

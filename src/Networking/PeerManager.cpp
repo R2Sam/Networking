@@ -40,6 +40,24 @@ Peer PeerManager::AddPeer(const ws_cli_conn_t wsPeer, const Address& address, co
 	return peer;
 }
 
+bool PeerManager::EditPeer(const Peer& peer)
+{
+	if (peer.id == 0)
+	{
+		return false;
+	}
+
+	auto it = m_peers.find(peer.id);
+	if (it == m_peers.end())
+	{
+		return false;
+	}
+
+	it->second = peer;
+
+	return true;
+}
+
 void PeerManager::RemovePeer(const PeerId peerId)
 {
 	if (peerId == 0)
@@ -124,7 +142,7 @@ Peer PeerManager::GetPeerWs(const ws_cli_conn_t wsPeer) const
 	return peer;
 }
 
-const std::unordered_map<PeerId, Peer>& PeerManager::GetPeers() const
+std::unordered_map<PeerId, Peer> PeerManager::GetPeers() const
 {
 	return m_peers;
 }

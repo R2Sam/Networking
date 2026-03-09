@@ -146,3 +146,14 @@ target_link_libraries(networking
     sodium
     ${SYSTEM_LIBS}
 )
+
+# ------------------------------------------------------------------------------
+# Networking tests
+# ------------------------------------------------------------------------------
+
+option(BUILD_TESTS "Build tests" OFF)
+
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(Tests)
+endif()
