@@ -11,11 +11,21 @@
 #include <atomic>
 #include <cstring>
 
-static std::atomic<u32> sInstances = 0;
+#ifdef TESTS
+#include "catch2/catch_test_macros.hpp"
+
+TEST_CASE("Test test", "[init]")
+{
+	REQUIRE(true);
+}
+
+#endif
+
+static std::atomic<u32> s_instances = 0;
 
 NetworkCore::NetworkCore()
 {
-	if (!sInstances)
+	if (!s_instances)
 	{
 		if (enet_initialize())
 		{
@@ -23,16 +33,16 @@ NetworkCore::NetworkCore()
 		}
 	}
 
-	++sInstances;
+	++s_instances;
 }
 
 NetworkCore::~NetworkCore()
 {
 	Shutdown();
 
-	--sInstances;
+	--s_instances;
 
-	if (!sInstances)
+	if (!s_instances)
 	{
 		enet_deinitialize();
 	}

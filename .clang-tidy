@@ -50,6 +50,10 @@ CheckOptions:
     value: s_
   - key: readability-identifier-naming.StaticVariableCase
     value: camelBack
+  - key: readability-identifier-naming.GlobalVariablePrefix
+    value: s_
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: camelBack
   - key: readability-identifier-naming.EnumCase
     value: CamelCase
   - key: readability-identifier-naming.EnumConstantCase

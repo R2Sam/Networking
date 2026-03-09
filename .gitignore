@@ -1,6 +1,7 @@
 *.exe
 bin/main
 bin/lib*
+bin/test*
 docs
 *.o
 *.d

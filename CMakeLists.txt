@@ -132,28 +132,75 @@ file(GLOB_RECURSE SRC CONFIGURE_DEPENDS
 
 list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
 
-add_library(networking STATIC ${SRC})
+option(BUILD_TESTS "Build tests" OFF)
 
-target_include_directories(networking
-  PUBLIC
+add_library(networking_base INTERFACE)
+
+target_include_directories(networking_base
+  INTERFACE
     include
     src
 )
 
-target_link_libraries(networking
-  PRIVATE
+target_link_libraries(networking_base
+  INTERFACE
     ws
     sodium
     ${SYSTEM_LIBS}
 )
 
+if(NOT BUILD_TESTS)
+
+add_library(networking STATIC ${SRC})
+
+target_link_libraries(networking
+  PUBLIC
+  networking_base)
+
+endif()
+
 # ------------------------------------------------------------------------------
 # Networking tests
 # ------------------------------------------------------------------------------
 
-option(BUILD_TESTS "Build tests" OFF)
-
 if(BUILD_TESTS)
     enable_testing()
-    add_subdirectory(Tests)
+
+    FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG v3.4.0
+    GIT_SHALLOW TRUE
+    )
+
+    FetchContent_MakeAvailable(Catch2)
+    list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
+
+    file(GLOB_RECURSE TESTS CONFIGURE_DEPENDS
+    tests/*.cpp
+    )
+    list(FILTER TESTS EXCLUDE REGEX ".*/main\\.cpp$")
+
+    add_executable(tests
+      ${SRC}
+      ${TESTS})
+
+    target_include_directories(tests
+      PRIVATE
+        include
+        src
+        tests
+    )
+
+    target_link_libraries(tests
+      PRIVATE
+        networking_base
+        Catch2::Catch2WithMain
+    )
+
+    target_compile_definitions(tests PRIVATE TESTS=1)
+
+    include(CTest)
+    include(Catch)
+    catch_discover_tests(tests)
 endif()

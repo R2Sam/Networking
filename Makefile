@@ -1,6 +1,8 @@
 UNAME := $(shell uname -s)
 JOBS := $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
 
+.PHONY: debug release tests clear format fix run clean
+
 ifeq ($(UNAME), Linux)
 debug:
 	mkdir -p build && cmake -B build -DFETCHCONTENT_BASE_DIR=../.deps -DCMAKE_BUILD_TYPE=Debug  && cd build && $(MAKE) -j${JOBS} -s
@@ -11,9 +13,9 @@ debug:
 release:
 	mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && $(MAKE) -j${JOBS} -s
 
-test:
+tests:
 	mkdir -p build && cmake -B build -DFETCHCONTENT_BASE_DIR=../.deps -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON  && cd build && $(MAKE) -j${JOBS} -s
-	cd bin && ./networking_tests
+	cd bin && ./tests
 
 clear:
 	-mv build/compile_commands.json compile_commands.json

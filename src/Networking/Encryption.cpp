@@ -4,10 +4,10 @@
 
 #include <vector>
 
-bool sodiumInitialized = false;
+static bool s_sodiumInitialized = false;
 
-const std::string DEFAULT_KEY_HEX = "decefb8883cfe503d28b62d39428cdd2af82a77464cf0a1aff35f44113c856e7";
-unsigned char defaultKey[crypto_secretbox_KEYBYTES];
+static const std::string DEFAULT_KEY_HEX = "decefb8883cfe503d28b62d39428cdd2af82a77464cf0a1aff35f44113c856e7";
+unsigned char s_defaultKey[crypto_secretbox_KEYBYTES];
 
 void FromHex(const std::string& hex, unsigned char* key)
 {
@@ -20,7 +20,7 @@ void FromHex(const std::string& hex, unsigned char* key)
 
 bool Encryption::InitEncryption()
 {
-	if (!sodiumInitialized)
+	if (!s_sodiumInitialized)
 	{
 		if (sodium_init() < 0)
 		{
@@ -31,10 +31,10 @@ bool Encryption::InitEncryption()
 		for (size_t i = 0; i < DEFAULT_KEY_HEX.length() / 2; ++i)
 		{
 			std::string byteString = DEFAULT_KEY_HEX.substr(i * 2, 2);
-			defaultKey[i] = static_cast<unsigned char>(std::stoi(byteString, nullptr, 16));
+			s_defaultKey[i] = static_cast<unsigned char>(std::stoi(byteString, nullptr, 16));
 		}
 
-		sodiumInitialized = true;
+		s_sodiumInitialized = true;
 	}
 
 	return true;
@@ -42,7 +42,7 @@ bool Encryption::InitEncryption()
 
 std::string Encryption::Encrypt(const std::string& data, const std::string& key)
 {
-	if (!sodiumInitialized)
+	if (!s_sodiumInitialized)
 	{
 		return "";
 	}
@@ -84,7 +84,7 @@ std::string Encryption::Encrypt(const std::string& data, const std::string& key)
 
 std::string Encryption::Decrypt(const std::string& encryptedData, const std::string& key)
 {
-	if (!sodiumInitialized)
+	if (!s_sodiumInitialized)
 	{
 		return "";
 	}
@@ -131,7 +131,7 @@ std::string Encryption::Decrypt(const std::string& encryptedData, const std::str
 
 std::string Encryption::Encrypt(const std::string& data)
 {
-	if (!sodiumInitialized)
+	if (!s_sodiumInitialized)
 	{
 		return "";
 	}
@@ -144,7 +144,7 @@ std::string Encryption::Encrypt(const std::string& data)
 
 	// Encrypt the plaintext
 	if (crypto_secretbox_easy(ciphertext.data(), reinterpret_cast<const unsigned char*>(data.data()), data.size(),
-		nonce, defaultKey))
+		nonce, s_defaultKey))
 	{
 		return "";
 	}
@@ -158,7 +158,7 @@ std::string Encryption::Encrypt(const std::string& data)
 
 std::string Encryption::Decrypt(const std::string& encryptedData)
 {
-	if (!sodiumInitialized)
+	if (!s_sodiumInitialized)
 	{
 		return "";
 	}
@@ -180,7 +180,7 @@ std::string Encryption::Decrypt(const std::string& encryptedData)
 	std::vector<unsigned char> decrypted(ciphertext.size() - crypto_secretbox_MACBYTES);
 
 	// Decrypt the ciphertext
-	if (crypto_secretbox_open_easy(decrypted.data(), ciphertext.data(), ciphertext.size(), nonce, defaultKey) != 0)
+	if (crypto_secretbox_open_easy(decrypted.data(), ciphertext.data(), ciphertext.size(), nonce, s_defaultKey) != 0)
 	{
 		LogColor(LOG_RED, "Failed to decrypt message (message may be tampered with)");
 		return "";
