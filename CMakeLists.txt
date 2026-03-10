@@ -143,7 +143,7 @@ file(GLOB_RECURSE SRC CONFIGURE_DEPENDS
 
 list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
 
-option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_TESTS_NETWORKING "Build tests" OFF)
 
 add_library(networking_base INTERFACE)
 
@@ -167,7 +167,7 @@ if (WIN32)
     z)
 endif()
 
-if(NOT BUILD_TESTS)
+if(NOT BUILD_TESTS_NETWORKING)
 
 add_library(networking STATIC ${SRC})
 
@@ -181,7 +181,7 @@ endif()
 # Networking tests
 # ------------------------------------------------------------------------------
 
-if(BUILD_TESTS)
+if(BUILD_TESTS_NETWORKING)
     enable_testing()
 
     FetchContent_Declare(
@@ -199,26 +199,26 @@ if(BUILD_TESTS)
     )
     list(FILTER TESTS EXCLUDE REGEX ".*/main\\.cpp$")
 
-    add_executable(tests
+    add_executable(testsNetworking
       ${SRC}
       ${TESTS})
 
-    target_include_directories(tests
+    target_include_directories(testsNetworking
       PRIVATE
         include
         src
         tests
     )
 
-    target_link_libraries(tests
+    target_link_libraries(testsNetworking
       PRIVATE
         networking_base
         Catch2::Catch2WithMain
     )
 
-    target_compile_definitions(tests PRIVATE TESTS=1)
+    target_compile_definitions(testsNetworking PRIVATE TESTS=1)
 
     include(CTest)
     include(Catch)
-    catch_discover_tests(tests)
+    catch_discover_tests(testsNetworking)
 endif()
