@@ -2,8 +2,6 @@
 #include "Networking/NetworkTypes.h"
 #include <thread>
 
-#include "Log/Log.h"
-
 AsyncNetwork::AsyncNetwork()
 {
 }
@@ -86,9 +84,10 @@ void AsyncNetwork::Loop()
 {
 	const u32 timeoutMs = 10;
 
+	std::queue<NetworkEvent> events;
+
 	while (m_running)
 	{
-		std::queue<NetworkEvent> events;
 		m_core.Poll(events, timeoutMs);
 		while (!events.empty())
 		{

@@ -53,7 +53,6 @@ if (WIN32)
     winmm
     ws2_32
     gomp
-    ${LIB_DIR}/libz.a
     -static
   )
 
@@ -115,13 +114,25 @@ set_target_properties(sodium PROPERTIES
 
 FetchContent_Declare(
     ws
-    GIT_REPOSITORY "https://github.com/Theldus/wsServer.git"
+    GIT_REPOSITORY "https://github.com/Theldus/wsServer"
     GIT_TAG master
     GIT_SHALLOW TRUE
     EXCLUDE_FROM_ALL
 )
 
 FetchContent_MakeAvailable(ws)
+
+if (WIN32)
+  FetchContent_Declare(
+    z
+    GIT_REPOSITORY "https://github.com/madler/zlib"
+    GIT_TAG v1.3.2
+    GIT_SHALLOW TRUE
+    EXCLUDE_FROM_ALL
+    )
+
+    FetchContent_MakeAvailable(z)
+endif()
 
 # ------------------------------------------------------------------------------
 # Networking static library
@@ -148,6 +159,13 @@ target_link_libraries(networking_base
     sodium
     ${SYSTEM_LIBS}
 )
+
+if (WIN32)
+  target_link_libraries(networking_base
+    INTERFACE
+    networking_base
+    z)
+endif()
 
 if(NOT BUILD_TESTS)
 
