@@ -4,6 +4,10 @@
 #include "Networking/NetworkTypes.h"
 #include "Types.h"
 
+#ifndef assert
+#define assert(condition) Assert(condition)
+#endif
+
 #include "ThreadSafeQueue/concurrentqueue.h"
 #include <thread>
 #include <vector>

@@ -118,6 +118,7 @@ Peer NetworkCore::Connect(const Address& address, const u32 data)
 	if (enet_address_set_host(&addr, address.ip.c_str()) < 0)
 	{
 		LogColor(LOG_YELLOW, "Failed to resolve ip ", address.ip);
+		return {};
 	}
 	addr.port = address.port;
 
