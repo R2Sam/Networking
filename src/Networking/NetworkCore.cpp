@@ -354,8 +354,8 @@ void NetworkCore::AddCompression(_ENetHost* const host)
 	enet_host_compress(host, &zlibCompressor);
 }
 
-size_t Compress(void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit, unsigned char* output,
-size_t outputLimit)
+size_t Compress([[maybe_unused]] void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit,
+unsigned char* output, size_t outputLimit)
 {
 	std::vector<u8> inputData(inputLimit);
 
@@ -372,7 +372,7 @@ size_t outputLimit)
 	return size_t(result == Z_OK ? outputLength : 0);
 }
 
-size_t Decompress(void* context, const unsigned char* input, size_t inputLength, unsigned char* output,
+size_t Decompress([[maybe_unused]] void* context, const unsigned char* input, size_t inputLength, unsigned char* output,
 size_t outputLength)
 {
 	uLongf outputLengthULongf = outputLength;
