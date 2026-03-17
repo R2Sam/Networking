@@ -1,8 +1,8 @@
-#include "Peer2PeerServer.h"
+#include "Peer2PeerServer.hpp"
 
-#include "Assert.h"
+#include "Assert.hpp"
 
-#include "Peer2PeerPacket.h"
+#include "Peer2PeerPacket.hpp"
 #include "cereal/MyCereal.h"
 #include <cereal/types/string.hpp>
 #include <cereal/types/utility.hpp>

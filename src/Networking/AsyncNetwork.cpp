@@ -1,5 +1,5 @@
-#include "AsyncNetwork.h"
-#include "Networking/NetworkTypes.h"
+#include "AsyncNetwork.hpp"
+#include "Networking/NetworkTypes.hpp"
 #include <thread>
 
 AsyncNetwork::AsyncNetwork()

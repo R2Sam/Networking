@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Types.h"
+#include "Types.hpp"
 
-#include "NetworkTypes.h"
-#include "PeerManager.h"
+#include "NetworkTypes.hpp"
+#include "PeerManager.hpp"
 
 #include <mutex>
 #include <queue>

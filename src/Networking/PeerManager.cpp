@@ -1,8 +1,8 @@
-#include "PeerManager.h"
+#include "PeerManager.hpp"
 
 #include "enet/enet.h"
 
-#include "Assert.h"
+#include "Assert.hpp"
 
 Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state)
 {

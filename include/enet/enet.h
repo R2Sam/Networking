@@ -35,7 +35,7 @@
 #ifndef ENET_INCLUDE_H
 #define ENET_INCLUDE_H
 
-#include <Assert.h>
+#include "Assert.hpp"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>

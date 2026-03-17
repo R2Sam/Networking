@@ -2,7 +2,7 @@
 
 #include <libsodium/sodium.h>
 
-#include "Types.h"
+#include "Types.hpp"
 
 #include <array>
 #include <string>

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "NetworkCore.h"
-#include "Networking/NetworkTypes.h"
-#include "Types.h"
+#include "NetworkCore.hpp"
+#include "Networking/NetworkTypes.hpp"
+#include "Types.hpp"
 
 #ifndef assert
 #define assert(condition) Assert(condition)

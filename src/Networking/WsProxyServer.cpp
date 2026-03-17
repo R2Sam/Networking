@@ -1,4 +1,4 @@
-#include "WsProxyServer.h"
+#include "WsProxyServer.hpp"
 
 #include <cstring>
 #include <iterator>

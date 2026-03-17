@@ -1,12 +1,12 @@
 #define ENET_IMPLEMENTATION
 #include "enet/enet.h"
 
-#include "NetworkCore.h"
+#include "NetworkCore.hpp"
 
 #include "zlib/zlib.h"
 
-#include "Assert.h"
-#include "Log/Log.h"
+#include "Assert.hpp"
+#include "Log/Log.hpp"
 
 #include <atomic>
 #include <cstring>

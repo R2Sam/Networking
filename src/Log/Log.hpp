@@ -1,15 +1,17 @@
 #pragma once
 #include <chrono>
+#include <cxxabi.h>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <typeindex>
 
-inline std::mutex timeMutex;
+inline std::mutex s_timeMutex;
 
 inline void GetThreadSafeLocalTime(const time_t& timeInput, std::tm& timeInfo)
 {
-	std::lock_guard<std::mutex> lock(timeMutex);
+	std::lock_guard<std::mutex> lock(s_timeMutex);
 	std::tm* result = localtime(&timeInput);
 	if (result != nullptr)
 	{
@@ -50,17 +52,56 @@ inline const char* const LOG_YELLOW = "\033[93m";
 inline const char* const LOG_RED = "\033[91m";
 inline const char* const LOG_WHITE = "\033[97m";
 
+template <typename, typename = void>
+struct HasOstreamOperator : std::false_type
+{
+};
+
+template <typename T>
+struct HasOstreamOperator<T, std::void_t<decltype(std::declval<std::ostream&>() << std::declval<const T&>())>>
+: std::true_type
+{
+};
+
+template <typename, typename = void>
+struct HasPrintMethod : std::false_type
+{
+};
+
+template <typename T>
+struct HasPrintMethod<T, std::void_t<decltype(std::declval<const T&>().Print())>> : std::true_type
+{
+};
+
+template <typename T>
+std::string CheckOperator(const T& object)
+{
+	if constexpr (HasOstreamOperator<T>::value)
+	{
+		std::ostringstream oss;
+		oss << object;
+		return oss.str();
+	}
+
+	else if constexpr (HasPrintMethod<T>::value)
+	{
+		return object.Print();
+	}
+
+	return "INVALID";
+}
+
 template <typename... Args>
 void Log(Args&&... args)
 {
 #ifdef LOGFILE
 	std::ofstream logFile("log.txt", std::ios_base::app);
 	logFile << "[" << GetCurrentTimeString() << "] ";
-	(logFile << ... << std::forward<Args>(args)) << '\n';
+	(logFile << ... << CheckOperator(args)) << '\n';
 #endif
 
 	std::cerr << LOG_WHITE << "[" << GetCurrentTimeString() << "] ";
-	(std::cerr << ... << std::forward<Args>(args)) << ANSI_RESET << '\n';
+	(std::cerr << ... << CheckOperator(args)) << ANSI_RESET << '\n';
 }
 
 template <typename... Args>
@@ -69,40 +110,40 @@ void LogColor(const char* color, Args&&... args)
 #ifdef LOGFILE
 	std::ofstream logFile("log.txt", std::ios_base::app);
 	logFile << "[" << GetCurrentTimeString() << "] ";
-	(logFile << ... << std::forward<Args>(args)) << '\n';
+	(logFile << ... << CheckOperator(args)) << '\n';
 #endif
 
 	std::cerr << LOG_WHITE << "[" << GetCurrentTimeString() << "] ";
 	std::cerr << color;
-	(std::cerr << ... << std::forward<Args>(args));
+	(std::cerr << ... << CheckOperator(args));
 	std::cerr << ANSI_RESET << '\n';
 }
 
 template <typename... Args>
 void Output(Args&&... args)
 {
-	(std::cout << ... << std::forward<Args>(args)) << ANSI_RESET << '\n';
+	(std::cout << ... << CheckOperator(args)) << ANSI_RESET << '\n';
 }
 
 template <typename... Args>
 void OutputColor(const char* color, Args&&... args)
 {
 	std::cout << color;
-	(std::cout << ... << std::forward<Args>(args));
+	(std::cout << ... << CheckOperator(args));
 	std::cout << ANSI_RESET << '\n';
 }
 
 template <typename... Args>
 void OutputErr(Args&&... args)
 {
-	(std::cerr << ... << std::forward<Args>(args)) << ANSI_RESET << '\n';
+	(std::cerr << ... << CheckOperator(args)) << ANSI_RESET << '\n';
 }
 
 template <typename... Args>
 void OutputErrColor(const char* color, Args&&... args)
 {
 	std::cerr << color;
-	(std::cerr << ... << std::forward<Args>(args));
+	(std::cerr << ... << CheckOperator(args));
 	std::cerr << ANSI_RESET << '\n';
 }
 
@@ -155,3 +196,53 @@ public:
 inline Ansi ansi;
 
 #endif
+
+template <typename T>
+std::string Demangle()
+{
+	std::string name = typeid(T).name();
+
+	int status = -4;
+
+	std::unique_ptr<char, void (*)(void*)> res{abi::__cxa_demangle(name.c_str(), NULL, NULL, &status), std::free};
+
+	return (status == 0) ? res.get() : name;
+}
+
+inline std::string Demangle(const std::type_index& type)
+{
+	const char* name = type.name();
+
+	int status = -4;
+
+	std::unique_ptr<char, void (*)(void*)> res{abi::__cxa_demangle(name, nullptr, nullptr, &status), std::free};
+
+	return (status == 0) ? res.get() : name;
+}
+
+template <typename T>
+std::string DemangleWithoutNamespace()
+{
+	std::string demangled = Demangle<T>();
+
+	size_t pos = demangled.find_last_of("::");
+	if (pos != std::string::npos)
+	{
+		return demangled.substr(pos + 1);
+	}
+
+	return demangled;
+}
+
+inline std::string DemangleWithoutNamespace(const std::type_index& type)
+{
+	std::string demangled = Demangle(type);
+
+	size_t pos = demangled.find_last_of("::");
+	if (pos != std::string::npos)
+	{
+		return demangled.substr(pos + 1);
+	}
+
+	return demangled;
+}

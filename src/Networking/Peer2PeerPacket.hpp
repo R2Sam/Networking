@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Networking/NetworkTypes.h"
+#include "Networking/NetworkTypes.hpp"
 
 template <class Archive>
 void serialize(Archive& archive, Address& address) // NOLINT(readability-identifier-naming)

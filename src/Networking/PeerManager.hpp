@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NetworkTypes.h"
+#include "NetworkTypes.hpp"
 
 #include <queue>
 #include <unordered_map>

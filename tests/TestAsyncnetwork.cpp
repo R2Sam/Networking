@@ -8,8 +8,8 @@
 #include <vector>
 #include <atomic>
 #include <iostream>
-#include "Networking/AsyncNetwork.h"
-#include "Networking/NetworkTypes.h"
+#include "Networking/AsyncNetwork.hpp"
+#include "Networking/NetworkTypes.hpp"
 
 using namespace std::chrono_literals;
 

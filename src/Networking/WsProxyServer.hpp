@@ -1,7 +1,7 @@
 #pragma once
 
-#include "NetworkCore.h"
-#include "WsNetworkCore.h"
+#include "NetworkCore.hpp"
+#include "WsNetworkCore.hpp"
 
 class WsProxyServer
 {

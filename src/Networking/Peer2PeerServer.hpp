@@ -1,8 +1,8 @@
 #pragma once
 
-#include "NetworkCore.h"
+#include "NetworkCore.hpp"
 
-#include "Peer2PeerPacket.h"
+#include "Peer2PeerPacket.hpp"
 
 #include <unordered_set>
 

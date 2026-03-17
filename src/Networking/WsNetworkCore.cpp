@@ -1,4 +1,4 @@
-#include "WsNetworkCore.h"
+#include "WsNetworkCore.hpp"
 
 #include "ws.h"
 #include "zlib/zlib.h"

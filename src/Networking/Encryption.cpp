@@ -1,6 +1,6 @@
-#include "Encryption.h"
+#include "Encryption.hpp"
 
-#include "Log/Log.h"
+#include "Log/Log.hpp"
 
 #include <vector>
 
