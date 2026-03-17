@@ -28,8 +28,8 @@ format:
 	run-clang-tidy -quiet -j${JOBS} -p build $(CURDIR)/src/
 
 fix:
-	find src -name "*.cpp" -o -name "*.h" | xargs -P${JOBS} clang-format -i --Werror
 	run-clang-tidy -quiet -fix -j${JOBS} -p build $(CURDIR)/src/
+	find src -name "*.cpp" -o -name "*.h" | xargs -P${JOBS} clang-format -i --Werror
 
 run:
 	gnome-terminal -- zsh -c "cd bin && ./main; exec zsh"
