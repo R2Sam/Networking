@@ -35,7 +35,7 @@ void AsyncNetwork::Start()
 	}
 
 	m_running = true;
-	m_thread = std::thread(&AsyncNetwork::Loop, this);
+	m_thread = std::jthread(&AsyncNetwork::Loop, this);
 }
 
 void AsyncNetwork::Stop()

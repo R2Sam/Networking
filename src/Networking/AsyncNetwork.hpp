@@ -58,7 +58,7 @@ private:
 	void Loop();
 
 	NetworkCore m_core;
-	std::thread m_thread;
+	std::jthread m_thread;
 	moodycamel::ConcurrentQueue<Command> m_commandQueue;
 	moodycamel::ConcurrentQueue<NetworkEvent> m_eventQueue;
 	std::atomic<bool> m_running = false;
