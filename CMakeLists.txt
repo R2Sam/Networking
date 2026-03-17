@@ -186,6 +186,22 @@ target_link_libraries(networking_base
     ${SYSTEM_LIBS}
 )
 
+target_compile_options(networking_base INTERFACE
+  $<$<CONFIG:Debug>:
+        $<$<PLATFORM_ID:Linux>:
+        -fsanitize=address
+        -fsanitize=undefined>
+    >
+  )
+
+target_link_options(networking_base INTERFACE
+  $<$<CONFIG:Debug>:
+        $<$<PLATFORM_ID:Linux>:
+        -fsanitize=address
+        -fsanitize=undefined>
+    >
+  )
+
 if (WIN32)
   target_link_libraries(networking_base
     INTERFACE
