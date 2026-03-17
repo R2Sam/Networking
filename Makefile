@@ -24,12 +24,12 @@ clear:
 	-mv compile_commands.json build/compile_commands.json
 	
 format:
-	find src -name "*.cpp" -o -name "*.h" | xargs -P${JOBS} clang-format --dry-run --Werror
+	find src -name "*.cpp" -o -name "*.hpp" | xargs -P${JOBS} clang-format --dry-run --Werror
 	run-clang-tidy -quiet -j${JOBS} -p build $(CURDIR)/src/
 
 fix:
 	run-clang-tidy -quiet -fix -j${JOBS} -p build $(CURDIR)/src/
-	find src -name "*.cpp" -o -name "*.h" | xargs -P${JOBS} clang-format -i --Werror
+	find src -name "*.cpp" -o -name "*.hpp" | xargs -P${JOBS} clang-format -i --Werror
 
 run:
 	gnome-terminal -- zsh -c "cd bin && ./main; exec zsh"

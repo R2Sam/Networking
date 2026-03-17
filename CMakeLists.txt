@@ -134,6 +134,31 @@ if (WIN32)
     FetchContent_MakeAvailable(z)
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Utils")
+    message(STATUS "Using local Utils repo")
+    FetchContent_Declare(
+        utils
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../Utils/
+    )
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../Utils")
+  message(STATUS "Using local Utils repo")
+    FetchContent_Declare(
+        utils
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../Utils/
+    )
+else()
+    message(STATUS "Using online Utils repo")
+    FetchContent_Declare(
+        utils
+        GIT_REPOSITORY https://github.com/R2Sam/Utils.git
+        GIT_TAG main
+        GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL
+    )
+endif()
+
+FetchContent_MakeAvailable(utils)
+
 # ------------------------------------------------------------------------------
 # Networking static library
 # ------------------------------------------------------------------------------
@@ -157,6 +182,7 @@ target_link_libraries(networking_base
   INTERFACE
     ws
     sodium
+    utils
     ${SYSTEM_LIBS}
 )
 
