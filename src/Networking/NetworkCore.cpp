@@ -6,7 +6,7 @@
 #include "zlib/zlib.h"
 
 #include "Assert.hpp"
-#include "Log/Log.hpp"
+#include "Log/Logger.hpp"
 
 #include <atomic>
 #include <cstring>
@@ -29,7 +29,7 @@ NetworkCore::NetworkCore()
 	{
 		if (enet_initialize())
 		{
-			LogColor(LOG_YELLOW, "Failed to initialize enet");
+			Logger::Write<LogLevel::WARN>("Failed to initialize enet");
 		}
 	}
 
@@ -52,7 +52,7 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 {
 	if (m_host)
 	{
-		LogColor(LOG_RED, "Host already present");
+		Logger::Write<LogLevel::ERROR>("Host already present");
 		return false;
 	}
 
@@ -66,7 +66,7 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 
 	if (!m_host)
 	{
-		LogColor(LOG_RED, "Enet failed to create server at port: ", addr.port);
+		Logger::Write<LogLevel::ERROR>("Enet failed to create server at port: ", addr.port);
 		return false;
 	}
 
@@ -79,7 +79,7 @@ bool NetworkCore::InitClient(const u32 maxPeers, const u32 channels)
 {
 	if (m_host)
 	{
-		LogColor(LOG_RED, "Host already present");
+		Logger::Write<LogLevel::ERROR>("Host already present");
 		return false;
 	}
 
@@ -89,7 +89,7 @@ bool NetworkCore::InitClient(const u32 maxPeers, const u32 channels)
 
 	if (!m_host)
 	{
-		LogColor(LOG_RED, "Enet failed to create client");
+		Logger::Write<LogLevel::ERROR>("Enet failed to create client");
 		return false;
 	}
 
@@ -117,7 +117,7 @@ Peer NetworkCore::Connect(const Address& address, const u32 data)
 	ENetAddress addr;
 	if (enet_address_set_host(&addr, address.ip.c_str()) < 0)
 	{
-		LogColor(LOG_YELLOW, "Failed to resolve ip ", address.ip);
+		Logger::Write<LogLevel::WARN>("Failed to resolve ip ", address.ip);
 		return {};
 	}
 	addr.port = address.port;
@@ -125,7 +125,7 @@ Peer NetworkCore::Connect(const Address& address, const u32 data)
 	_ENetPeer* p = enet_host_connect(m_host, &addr, m_host->channelLimit, data);
 	if (!p)
 	{
-		LogColor(LOG_YELLOW, "Failed to initialize connection to ", address.ip, ":", address.port);
+		Logger::Write<LogLevel::WARN>("Failed to initialize connection to ", address.ip, ":", address.port);
 		return {};
 	}
 
@@ -198,13 +198,13 @@ bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const Channe
 
 	if (!peer.enetPeer)
 	{
-		LogColor(LOG_YELLOW, "Cannot sent to peer ", peerId, ", peer does not exist");
+		Logger::Write<LogLevel::WARN>("Cannot sent to peer ", peerId, ", peer does not exist");
 		return false;
 	}
 
 	if (channel >= peer.enetPeer->channelCount)
 	{
-		LogColor(LOG_YELLOW, "ChannelId was invalid when sending to peer ", peerId);
+		Logger::Write<LogLevel::WARN>("ChannelId was invalid when sending to peer ", peerId);
 		return false;
 	}
 
@@ -212,7 +212,7 @@ bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const Channe
 
 	if (!packet)
 	{
-		LogColor(LOG_YELLOW, "Failed to create packet when sending to peer ", peerId);
+		Logger::Write<LogLevel::WARN>("Failed to create packet when sending to peer ", peerId);
 		return false;
 	}
 
@@ -234,13 +234,13 @@ const bool reliable)
 
 	if (!peer.enetPeer)
 	{
-		LogColor(LOG_YELLOW, "Cannot sent to peer ", peerId, ", peer does not exist");
+		Logger::Write<LogLevel::WARN>("Cannot sent to peer ", peerId, ", peer does not exist");
 		return false;
 	}
 
 	if (channel >= peer.enetPeer->channelCount)
 	{
-		LogColor(LOG_YELLOW, "ChannelId was invalid when sending to peer ", peerId);
+		Logger::Write<LogLevel::WARN>("ChannelId was invalid when sending to peer ", peerId);
 		return false;
 	}
 
@@ -248,7 +248,7 @@ const bool reliable)
 
 	if (!packet)
 	{
-		LogColor(LOG_YELLOW, "Failed to create packet when sending to peer ", peerId);
+		Logger::Write<LogLevel::WARN>("Failed to create packet when sending to peer ", peerId);
 		return false;
 	}
 
