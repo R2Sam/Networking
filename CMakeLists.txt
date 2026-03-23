@@ -99,12 +99,6 @@ else()
 endif()
 
 # ------------------------------------------------------------------------------
-# Global compiler & linker flags
-# ------------------------------------------------------------------------------
-string(JOIN " " CMAKE_CXX_FLAGS ${COMMON_FLAGS})
-string(JOIN " " CMAKE_EXE_LINKER_FLAGS ${LINK_FLAGS})
-
-# ------------------------------------------------------------------------------
 # Imported third-party libraries
 # ------------------------------------------------------------------------------
 add_library(sodium STATIC IMPORTED)
@@ -124,14 +118,17 @@ FetchContent_MakeAvailable(ws)
 
 if (WIN32)
   FetchContent_Declare(
-    z
+    zlib
     GIT_REPOSITORY "https://github.com/madler/zlib"
     GIT_TAG v1.3.2
     GIT_SHALLOW TRUE
     EXCLUDE_FROM_ALL
     )
 
-    FetchContent_MakeAvailable(z)
+  set(ZLIB_BUILD_STATIC ON CACHE BOOL "Enable building zlib static library" FORCE)
+  set(ZLIB_BUILD_SHARED OFF CACHE BOOL "Enable building zlib shared library" FORCE)
+
+    FetchContent_MakeAvailable(zlib)
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Utils")
@@ -187,6 +184,7 @@ target_link_libraries(networking_base
 )
 
 target_compile_options(networking_base INTERFACE
+  ${COMMON_FLAGS}
   $<$<CONFIG:Debug>:
         $<$<PLATFORM_ID:Linux>:
         -fsanitize=address
@@ -205,8 +203,7 @@ target_link_options(networking_base INTERFACE
 if (WIN32)
   target_link_libraries(networking_base
     INTERFACE
-    networking_base
-    z)
+    ZLIB::ZLIBSTATIC)
 endif()
 
 if(NOT BUILD_TESTS_NETWORKING)

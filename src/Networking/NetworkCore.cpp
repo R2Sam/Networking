@@ -1,5 +1,6 @@
 #define ENET_IMPLEMENTATION
 #include "enet/enet.h"
+#undef ERROR
 
 #include "NetworkCore.hpp"
 
