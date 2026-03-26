@@ -8,10 +8,9 @@
 #define assert(condition) Assert(condition)
 #endif
 
-#include "ThreadSafeQueue/concurrentqueue.h"
+#include "ThreadSafeQueue/blockingconcurrentqueue.h"
 #include <thread>
 #include <vector>
-
 class AsyncNetwork
 {
 public:
@@ -34,6 +33,7 @@ public:
 	const bool reliable = true);
 
 	bool PopEvent(NetworkEvent& event);
+	void PopEventBlocking(NetworkEvent& event);
 
 private:
 
@@ -60,6 +60,6 @@ private:
 	NetworkCore m_core;
 	std::jthread m_thread;
 	moodycamel::ConcurrentQueue<Command> m_commandQueue;
-	moodycamel::ConcurrentQueue<NetworkEvent> m_eventQueue;
+	moodycamel::BlockingConcurrentQueue<NetworkEvent> m_eventQueue;
 	std::atomic<bool> m_running = false;
 };

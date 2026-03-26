@@ -1,6 +1,5 @@
 #include "AsyncNetwork.hpp"
 #include "Networking/NetworkTypes.hpp"
-#include <thread>
 
 AsyncNetwork::AsyncNetwork()
 {
@@ -78,6 +77,11 @@ const bool reliable)
 bool AsyncNetwork::PopEvent(NetworkEvent& event)
 {
 	return m_eventQueue.try_dequeue(event);
+}
+
+void AsyncNetwork::PopEventBlocking(NetworkEvent& event)
+{
+	m_eventQueue.wait_dequeue(event);
 }
 
 void AsyncNetwork::Loop()
