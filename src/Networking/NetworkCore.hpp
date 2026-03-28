@@ -15,6 +15,10 @@ class NetworkCore
 public:
 
 	NetworkCore();
+
+	NetworkCore(const NetworkCore& other) = delete;
+	NetworkCore& operator=(const NetworkCore& other) = delete;
+
 	~NetworkCore();
 
 	bool InitServer(const u16 port, const u32 maxPeers = 64, const u32 channels = 1);

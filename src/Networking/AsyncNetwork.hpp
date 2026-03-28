@@ -16,6 +16,10 @@ class AsyncNetwork
 public:
 
 	AsyncNetwork();
+
+	AsyncNetwork(const AsyncNetwork& other) = delete;
+	AsyncNetwork& operator=(const AsyncNetwork& other) = delete;
+
 	~AsyncNetwork();
 
 	bool InitServer(const u16 port, const u32 maxPeers = 64, const u32 channels = 1);
