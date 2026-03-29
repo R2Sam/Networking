@@ -508,7 +508,7 @@ TEST_CASE("Concurrent operations work correctly", "[concurrency]")
     });
     
     // Send messages
-    senders.reserve(NUM_MESSAGES);
+    senders.reserve(numMessages);
 for (int i = 0; i < numMessages; i++)
     {
         senders.emplace_back([&, i]()
