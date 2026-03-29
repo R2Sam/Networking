@@ -160,9 +160,9 @@ FetchContent_MakeAvailable(utils)
 # Networking static library
 # ------------------------------------------------------------------------------
 
-option(BUILD_TESTS "Build tests" OFF)
+option(BUILD_TESTS_NETWORKING "Build tests" OFF)
 
-if(NOT BUILD_TESTS)
+if(NOT BUILD_TESTS_NETWORKING)
 
 file(GLOB_RECURSE SRC CONFIGURE_DEPENDS
   src/*.cpp
@@ -216,7 +216,7 @@ endif()
 # Networking tests
 # ------------------------------------------------------------------------------
 
-if(BUILD_TESTS)
+if(BUILD_TESTS_NETWORKING)
     enable_testing()
 
     FetchContent_Declare(
@@ -233,18 +233,18 @@ if(BUILD_TESTS)
     list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
     file(GLOB_RECURSE TESTS CONFIGURE_DEPENDS tests/*.cpp)
 
-    add_executable(Tests
+    add_executable(TestsNetworking
       ${SRC}
       ${TESTS})
 
-    target_include_directories(Tests
+    target_include_directories(TestsNetworking
       PRIVATE
         include
         src
         tests
     )
 
-    target_compile_options(Tests PRIVATE
+    target_compile_options(TestsNetworking PRIVATE
     ${COMMON_FLAGS}
     $<$<CONFIG:Debug>:
           $<$<PLATFORM_ID:Linux>:
@@ -253,7 +253,7 @@ if(BUILD_TESTS)
       >
     )
 
-  target_link_options(Tests PRIVATE
+  target_link_options(TestsNetworking PRIVATE
     $<$<CONFIG:Debug>:
           $<$<PLATFORM_ID:Linux>:
           -fsanitize=address
@@ -261,7 +261,7 @@ if(BUILD_TESTS)
       >
     )
 
-    target_link_libraries(Tests
+    target_link_libraries(TestsNetworking
       PRIVATE
         ws
         sodium
@@ -270,12 +270,12 @@ if(BUILD_TESTS)
         ${SYSTEM_LIBS}
     )
 
-    set_target_properties(Tests PROPERTIES
+    set_target_properties(TestsNetworking PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
-    target_compile_definitions(Tests PRIVATE TESTS=1)
+    target_compile_definitions(TestsNetworking PRIVATE TESTS=1)
 
     include(CTest)
     include(Catch)
-    catch_discover_tests(Tests)
+    catch_discover_tests(TestsNetworking)
 endif()
