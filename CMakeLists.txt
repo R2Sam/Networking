@@ -159,31 +159,26 @@ FetchContent_MakeAvailable(utils)
 # ------------------------------------------------------------------------------
 # Networking static library
 # ------------------------------------------------------------------------------
+
+option(BUILD_TESTS "Build tests" OFF)
+
+if(NOT BUILD_TESTS)
+
 file(GLOB_RECURSE SRC CONFIGURE_DEPENDS
   src/*.cpp
 )
 
 list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
 
-option(BUILD_TESTS_NETWORKING "Build tests" OFF)
+add_library(networking STATIC ${SRC})
 
-add_library(networking_base INTERFACE)
-
-target_include_directories(networking_base
-  INTERFACE
+target_include_directories(networking
+  PUBLIC
     include
     src
 )
 
-target_link_libraries(networking_base
-  INTERFACE
-    ws
-    sodium
-    utils
-    ${SYSTEM_LIBS}
-)
-
-target_compile_options(networking_base INTERFACE
+target_compile_options(networking PRIVATE
   ${COMMON_FLAGS}
   $<$<CONFIG:Debug>:
         $<$<PLATFORM_ID:Linux>:
@@ -192,7 +187,7 @@ target_compile_options(networking_base INTERFACE
     >
   )
 
-target_link_options(networking_base INTERFACE
+target_link_options(networking PRIVATE
   $<$<CONFIG:Debug>:
         $<$<PLATFORM_ID:Linux>:
         -fsanitize=address
@@ -200,19 +195,20 @@ target_link_options(networking_base INTERFACE
     >
   )
 
-if (WIN32)
-  target_link_libraries(networking_base
-    INTERFACE
-    ZLIB::ZLIBSTATIC)
-endif()
-
-if(NOT BUILD_TESTS_NETWORKING)
-
-add_library(networking STATIC ${SRC})
-
 target_link_libraries(networking
   PUBLIC
-  networking_base)
+    ws
+    sodium
+    utils
+  PRIVATE
+    ${SYSTEM_LIBS}
+)
+
+if (WIN32)
+  target_link_libraries(networking
+    PUBLIC
+    ZLIB::ZLIBSTATIC)
+endif()
 
 endif()
 
@@ -220,7 +216,7 @@ endif()
 # Networking tests
 # ------------------------------------------------------------------------------
 
-if(BUILD_TESTS_NETWORKING)
+if(BUILD_TESTS)
     enable_testing()
 
     FetchContent_Declare(
@@ -233,31 +229,53 @@ if(BUILD_TESTS_NETWORKING)
     FetchContent_MakeAvailable(Catch2)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 
-    file(GLOB_RECURSE TESTS CONFIGURE_DEPENDS
-    tests/*.cpp
-    )
-    list(FILTER TESTS EXCLUDE REGEX ".*/main\\.cpp$")
+    file(GLOB_RECURSE SRC CONFIGURE_DEPENDS src/*.cpp)
+    list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
+    file(GLOB_RECURSE TESTS CONFIGURE_DEPENDS tests/*.cpp)
 
-    add_executable(testsNetworking
+    add_executable(Tests
       ${SRC}
       ${TESTS})
 
-    target_include_directories(testsNetworking
+    target_include_directories(Tests
       PRIVATE
         include
         src
         tests
     )
 
-    target_link_libraries(testsNetworking
-      PRIVATE
-        networking_base
-        Catch2::Catch2WithMain
+    target_compile_options(Tests PRIVATE
+    ${COMMON_FLAGS}
+    $<$<CONFIG:Debug>:
+          $<$<PLATFORM_ID:Linux>:
+          -fsanitize=address
+          -fsanitize=undefined>
+      >
     )
 
-    target_compile_definitions(testsNetworking PRIVATE TESTS=1)
+  target_link_options(Tests PRIVATE
+    $<$<CONFIG:Debug>:
+          $<$<PLATFORM_ID:Linux>:
+          -fsanitize=address
+          -fsanitize=undefined>
+      >
+    )
+
+    target_link_libraries(Tests
+      PRIVATE
+        ws
+        sodium
+        utils
+        Catch2::Catch2WithMain
+        ${SYSTEM_LIBS}
+    )
+
+    set_target_properties(Tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+
+    target_compile_definitions(Tests PRIVATE TESTS=1)
 
     include(CTest)
     include(Catch)
-    catch_discover_tests(testsNetworking)
+    catch_discover_tests(Tests)
 endif()
