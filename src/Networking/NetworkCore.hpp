@@ -29,8 +29,9 @@ public:
 	void Disconnect(const PeerId peerId, const u32 data = 0);
 	void Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs = 0);
 
-	bool Send(const PeerId peerId, std::vector<u8>&& data, const ChannelId channel = 0, const bool reliable = true);
-	bool Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel = 0,
+	bool Send(const PeerId peerId, std::vector<std::byte>&& data, const ChannelId channel = 0,
+	const bool reliable = true);
+	bool Send(const PeerId peerId, const std::byte* data, const u32 size, const ChannelId channel = 0,
 	const bool reliable = true);
 
 	Peer GetPeer(const PeerId peerId) const;

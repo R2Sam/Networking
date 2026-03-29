@@ -62,15 +62,16 @@ void AsyncNetwork::Disconnect(const PeerId peerId, const u32 data)
 	m_commandQueue.enqueue({CommandType::DISCONNECT, peerId, {}, data});
 }
 
-void AsyncNetwork::Send(const PeerId peerId, std::vector<u8>&& data, const ChannelId channel, const bool reliable)
+void AsyncNetwork::Send(const PeerId peerId, std::vector<std::byte>&& data, const ChannelId channel,
+const bool reliable)
 {
 	m_commandQueue.enqueue({CommandType::SEND, peerId, {}, 0, std::move(data), channel, reliable});
 }
 
-void AsyncNetwork::Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel,
+void AsyncNetwork::Send(const PeerId peerId, const std::byte* data, const u32 size, const ChannelId channel,
 const bool reliable)
 {
-	std::vector<u8> vec(data, data + size);
+	std::vector<std::byte> vec(data, data + size);
 	Send(peerId, std::move(vec), channel, reliable);
 }
 

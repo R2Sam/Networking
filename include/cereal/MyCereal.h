@@ -6,10 +6,8 @@
 #include <sstream>
 #include <vector>
 
-using u8 = unsigned char;
-
 template<typename T>
-std::vector<u8> Serialize(const T& object)
+std::vector<std::byte> Serialize(const T& object)
 {
 	std::ostringstream oss(std::ios::binary);
 	{
@@ -19,11 +17,12 @@ std::vector<u8> Serialize(const T& object)
 
 	std::string str = oss.str();
 
-	return std::vector<u8>(str.begin(), str.end());
+	std::byte* ptr = reinterpret_cast<std::byte*>(str.data());
+	return std::vector<std::byte>(ptr, ptr + str.size());
 }
 
 template<typename T>
-T Deserialize(const std::vector<u8>& data)
+T Deserialize(const std::vector<std::byte>& data)
 {
 	T object;
 

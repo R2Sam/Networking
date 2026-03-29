@@ -53,7 +53,8 @@ void WsProxyServer::HandleEnet(std::queue<NetworkEvent>& events)
 		{
 			if (m_enetPeers[event.peer.id].empty())
 			{
-				m_enetPeers[event.peer.id].assign(event.data.begin(), event.data.end());
+				u8* ptr = reinterpret_cast<u8*>(event.data.data());
+				m_enetPeers[event.peer.id].assign(ptr, ptr + event.data.size());
 				break;
 			}
 
@@ -105,7 +106,8 @@ void WsProxyServer::HandleWs(std::queue<NetworkEvent>& events)
 		{
 			if (m_wsPeers[event.peer.id])
 			{
-				m_enetCore.Send(m_wsPeers[event.peer.id], (u8*)&event.peer.id, sizeof(event.peer.id));
+				m_enetCore.Send(m_wsPeers[event.peer.id], reinterpret_cast<std::byte*>(&event.peer.id),
+				sizeof(event.peer.id));
 			}
 
 			m_wsPeers.erase(event.peer.id);
@@ -119,7 +121,8 @@ void WsProxyServer::HandleWs(std::queue<NetworkEvent>& events)
 			{
 				for (const auto& pair : m_enetPeers)
 				{
-					if (pair.second == std::string(event.data.begin(), event.data.end()))
+					u8* ptr = reinterpret_cast<u8*>(event.data.data());
+					if (pair.second == std::string(ptr, ptr + event.data.size()))
 					{
 						m_wsPeers[event.peer.id] = pair.first;
 						break;
@@ -143,7 +146,7 @@ void WsProxyServer::HandleWs(std::queue<NetworkEvent>& events)
 				break;
 			}
 
-			std::vector<u8> data(sizeof(event.peer.id));
+			std::vector<std::byte> data(sizeof(event.peer.id));
 			memcpy(data.data(), &event.peer.id, sizeof(event.peer.id));
 			data.insert(data.end(), std::move_iterator(event.data.begin()), std::move_iterator(event.data.end()));
 

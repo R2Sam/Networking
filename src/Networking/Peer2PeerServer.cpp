@@ -95,10 +95,10 @@ void Peer2PeerServer::HandleRequest(const PeerId peer, const PeerId target)
 	}
 
 	Peer2PeerPacket hostPacket{Peer2PeerPacketType::ADDRESS, 0, m_server.GetPeer(target).address};
-	std::vector<u8> hostData = Serialize<Peer2PeerPacket>(hostPacket);
+	std::vector<std::byte> hostData = Serialize<Peer2PeerPacket>(hostPacket);
 
 	Peer2PeerPacket clientPacket{Peer2PeerPacketType::ADDRESS, 0, m_server.GetPeer(peer).address};
-	std::vector<u8> clientData = Serialize<Peer2PeerPacket>(clientPacket);
+	std::vector<std::byte> clientData = Serialize<Peer2PeerPacket>(clientPacket);
 
 	m_server.Send(peer, std::move(hostData));
 	m_server.Send(target, std::move(clientData));

@@ -1,7 +1,6 @@
 #include "WsNetworkCore.hpp"
 
 #include "ws.h"
-#include "zlib/zlib.h"
 
 #include <charconv>
 #include <cstring>
@@ -50,7 +49,7 @@ void WsNetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	m_eventsMutex.unlock();
 }
 
-bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data)
+bool WsNetworkCore::Send(const PeerId peer, const std::vector<std::byte>& data)
 {
 	Peer p = m_peerManager.GetPeer(peer);
 	if (!p.id)
@@ -58,12 +57,12 @@ bool WsNetworkCore::Send(const PeerId peer, const std::vector<u8>& data)
 		return false;
 	}
 
-	i32 result = ws_sendframe_bin(p.wsPeer, (char*)data.data(), data.size());
+	i32 result = ws_sendframe_bin(p.wsPeer, reinterpret_cast<const char*>(data.data()), data.size());
 
 	return result;
 }
 
-bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size)
+bool WsNetworkCore::Send(const PeerId peer, const std::byte* data, const u32 size)
 {
 	Peer p = m_peerManager.GetPeer(peer);
 	if (!p.id)
@@ -71,7 +70,7 @@ bool WsNetworkCore::Send(const PeerId peer, const u8* data, const u32 size)
 		return false;
 	}
 
-	i32 result = ws_sendframe_bin(p.wsPeer, (char*)data, size);
+	i32 result = ws_sendframe_bin(p.wsPeer, reinterpret_cast<const char*>(data), size);
 
 	return result;
 }
@@ -99,14 +98,14 @@ void WsNetworkCore::HandleConnect(ws_cli_conn_t client)
 
 		context->m_eventsMutex.lock();
 
-		context->m_events.emplace(NetworkEventType::CONNECT, newPeer, 0, std::vector<u8>());
+		context->m_events.emplace(NetworkEventType::CONNECT, newPeer, 0, std::vector<std::byte>());
 
 		context->m_eventsMutex.unlock();
 	}
 
 	else
 	{
-		context->m_events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<u8>());
+		context->m_events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<std::byte>());
 	}
 }
 
@@ -120,7 +119,7 @@ void WsNetworkCore::HandleDisconnect(ws_cli_conn_t client)
 	{
 		context->m_eventsMutex.lock();
 
-		context->m_events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<u8>());
+		context->m_events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<std::byte>());
 
 		context->m_eventsMutex.unlock();
 	}
@@ -154,7 +153,9 @@ void WsNetworkCore::HandleReceive(ws_cli_conn_t client, const u8* message, u64 m
 		return;
 	}
 
-	std::vector<u8> data(message, message + messageSize);
+	const std::byte* ptr = reinterpret_cast<const std::byte*>(message);
+
+	std::vector<std::byte> data(ptr, ptr + messageSize);
 
 	context->m_eventsMutex.lock();
 

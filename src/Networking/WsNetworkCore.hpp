@@ -23,8 +23,8 @@ public:
 
 	void Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs = 0);
 
-	bool Send(const PeerId peer, const std::vector<u8>& data);
-	bool Send(const PeerId peer, const u8* data, const u32 size);
+	bool Send(const PeerId peer, const std::vector<std::byte>& data);
+	bool Send(const PeerId peer, const std::byte* data, const u32 size);
 
 	Peer GetPeer(const PeerId peer);
 

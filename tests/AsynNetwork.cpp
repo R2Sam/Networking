@@ -18,8 +18,9 @@ bool WaitForEvent(AsyncNetwork& network, NetworkEvent& event, std::chrono::milli
     auto start = std::chrono::steady_clock::now();
     while (std::chrono::steady_clock::now() - start < timeout)
     {
-        if (network.PopEvent(event))
+        if (network.PopEvent(event)) {
             return true;
+}
         std::this_thread::sleep_for(1ms);
     }
     return false;
@@ -31,6 +32,11 @@ void ClearEvents(AsyncNetwork& network)
     NetworkEvent event;
     while (network.PopEvent(event)) {}
 }
+
+std::byte b(const i64 num)
+{
+    return std::byte(num);
+};
 
 // Test initialization and shutdown
 TEST_CASE("AsyncNetwork initializes and shuts down correctly", "[init]")
@@ -74,7 +80,8 @@ TEST_CASE("Client and server can establish connection", "[connection]")
     client.Connect(Address{"127.0.0.1", 12346}, 42);
     
     // Wait for connection events
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     
     SECTION("Server receives connect event")
     {
@@ -113,7 +120,8 @@ TEST_CASE("Data can be sent and received between client and server", "[data]")
     // Establish connection
     client.Connect(Address{"127.0.0.1", 12347}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
@@ -122,8 +130,8 @@ TEST_CASE("Data can be sent and received between client and server", "[data]")
     
     SECTION("Client to server data transfer")
     {
-        std::vector<u8> testData = {1, 2, 3, 4, 5};
-        std::vector<u8> data = testData;
+        std::vector<std::byte> testData = {b(1), b(2), b(3), b(4), b(5)};
+        std::vector<std::byte> data = testData;
         client.Send(serverEvent.peer.id, std::move(data), 0, true);
         
         REQUIRE(WaitForEvent(server, serverEvent));
@@ -133,8 +141,8 @@ TEST_CASE("Data can be sent and received between client and server", "[data]")
     
     SECTION("Server to client data transfer")
     {
-        std::vector<u8> responseData = {6, 7, 8, 9, 10};
-        std::vector<u8> data = responseData;
+        std::vector<std::byte> responseData = {b(6), b(7), b(8), b(9), b(10)};
+        std::vector<std::byte> data = responseData;
         server.Send(serverEvent.peer.id, std::move(data), 0, true);
         
         REQUIRE(WaitForEvent(client, clientEvent));
@@ -164,15 +172,16 @@ TEST_CASE("Unreliable messages can be sent", "[data][unreliable]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12348}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
     ClearEvents(server);
     
     // Send unreliable message
-    std::vector<u8> testData = {1, 2, 3, 4, 5};
-    std::vector<u8> data = testData;
+    std::vector<std::byte> testData = {b(1), b(2), b(3), b(4), b(5)};
+    std::vector<std::byte> data = testData;
     client.Send(serverEvent.peer.id, std::move(data), 0, false); // unreliable
     
     // Should still receive (in local network it likely arrives)
@@ -189,8 +198,8 @@ TEST_CASE("Unreliable messages can be sent", "[data][unreliable]")
 // Test multiple channels
 TEST_CASE("Multiple channels work correctly", "[channels]")
 {
-    const ChannelId CHANNEL1 = 0;
-    const ChannelId CHANNEL2 = 1;
+    const ChannelId channeL1 = 0;
+    const ChannelId channeL2 = 1;
     
     AsyncNetwork server;
     AsyncNetwork client;
@@ -204,21 +213,22 @@ TEST_CASE("Multiple channels work correctly", "[channels]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12349}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
     ClearEvents(server);
     
     // Send on channel 1
-    std::vector<u8> data1 = {1, 2, 3};
-    std::vector<u8> data = data1;
-    client.Send(serverEvent.peer.id, std::move(data), CHANNEL1, true);
+    std::vector<std::byte> data1 = {b(1), b(2), b(3)};
+    std::vector<std::byte> data = data1;
+    client.Send(serverEvent.peer.id, std::move(data), channeL1, true);
     
     // Send on channel 2
-    std::vector<u8> data2 = {4, 5, 6};
+    std::vector<std::byte> data2 = {b(4), b(5), b(6)};
     data = data2;
-    client.Send(serverEvent.peer.id, std::move(data), CHANNEL2, true);
+    client.Send(serverEvent.peer.id, std::move(data), channeL2, true);
     
     // Check received data and channels
     bool receivedChannel1 = false;
@@ -229,12 +239,12 @@ TEST_CASE("Multiple channels work correctly", "[channels]")
         REQUIRE(WaitForEvent(server, serverEvent));
         REQUIRE(serverEvent.type == NetworkEventType::RECEIVE);
         
-        if (serverEvent.channel == CHANNEL1)
+        if (serverEvent.channel == channeL1)
         {
             REQUIRE_THAT(serverEvent.data, Catch::Matchers::Equals(data1));
             receivedChannel1 = true;
         }
-        else if (serverEvent.channel == CHANNEL2)
+        else if (serverEvent.channel == channeL2)
         {
             REQUIRE_THAT(serverEvent.data, Catch::Matchers::Equals(data2));
             receivedChannel2 = true;
@@ -265,7 +275,8 @@ TEST_CASE("Disconnection works correctly", "[disconnect]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12350}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
@@ -311,21 +322,24 @@ TEST_CASE("Server can handle multiple clients", "[multi-client]")
     client1.Connect(Address{"127.0.0.1", 12351}, 1);
     client2.Connect(Address{"127.0.0.1", 12351}, 2);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     
     // Server receives two connections
     int connections = 0;
-    PeerId peerId1 = 0, peerId2 = 0;
+    PeerId peerId1 = 0;
+    PeerId peerId2 = 0;
     
     for (int i = 0; i < 2; i++)
     {
         REQUIRE(WaitForEvent(server, serverEvent));
         REQUIRE(serverEvent.type == NetworkEventType::CONNECT);
         
-        if (i == 0)
+        if (i == 0) {
             peerId1 = serverEvent.peer.id;
-        else
+        } else {
             peerId2 = serverEvent.peer.id;
+}
         connections++;
     }
     REQUIRE(connections == 2);
@@ -338,8 +352,8 @@ TEST_CASE("Server can handle multiple clients", "[multi-client]")
     REQUIRE(clientEvent.type == NetworkEventType::CONNECT);
     
     // Server sends to both clients
-    std::vector<u8> broadcastData = {99, 99, 99};
-    std::vector<u8> data = broadcastData;
+    std::vector<std::byte> broadcastData = {b(99), b(99), b(99)};
+    std::vector<std::byte> data = broadcastData;
     server.Send(peerId1, std::move(data), 0, true);
     data = broadcastData;
     server.Send(peerId2, std::move(data), 0, true);
@@ -401,7 +415,7 @@ TEST_CASE("Sending with invalid peer ID doesn't crash", "[error-handling]")
     client.Start();
     
     // Try to send with invalid peer ID
-    std::vector<u8> data = {1, 2, 3};
+    std::vector<std::byte> data = {b(1), b(2), b(3)};
     REQUIRE_NOTHROW(client.Send(999, std::move(data), 0, true));
     
     // Should not produce events
@@ -427,25 +441,27 @@ TEST_CASE("Large data can be transmitted", "[performance][large-data]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12352}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
     ClearEvents(server);
     
     // Send large data
-    const size_t LARGE_SIZE = 1024 * 1024; // 1MB
-    std::vector<u8> largeData(LARGE_SIZE);
-    for (size_t i = 0; i < LARGE_SIZE; i++)
-        largeData[i] = static_cast<u8>(i % 256);
+    const size_t largeSize = 1024 * 1024; // 1MB
+    std::vector<std::byte> largeData(largeSize);
+    for (size_t i = 0; i < largeSize; i++) {
+        largeData[i] = static_cast<std::byte>(i % 256);
+}
     
-    std::vector<u8> data = largeData;
+    std::vector<std::byte> data = largeData;
     client.Send(serverEvent.peer.id, std::move(data), 0, true);
     
     // Server should receive
     REQUIRE(WaitForEvent(server, serverEvent, 1000ms));
     REQUIRE(serverEvent.type == NetworkEventType::RECEIVE);
-    REQUIRE(serverEvent.data.size() == LARGE_SIZE);
+    REQUIRE(serverEvent.data.size() == largeSize);
     REQUIRE_THAT(serverEvent.data, Catch::Matchers::Equals(largeData));
     
     client.Stop();
@@ -469,44 +485,48 @@ TEST_CASE("Concurrent operations work correctly", "[concurrency]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12353}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
     // Rapidly send many messages
     std::vector<std::thread> senders;
-    const int NUM_MESSAGES = 100;
+    const int numMessages = 100;
     std::atomic<int> receivedCount(0);
     
     // Start receiver thread
     std::thread receiver([&]()
     {
         NetworkEvent event;
-        while (receivedCount < NUM_MESSAGES)
+        while (receivedCount < numMessages)
         {
-            if (server.PopEvent(event) && event.type == NetworkEventType::RECEIVE)
+            if (server.PopEvent(event) && event.type == NetworkEventType::RECEIVE) {
                 receivedCount++;
+}
         }
     });
     
     // Send messages
-    for (int i = 0; i < NUM_MESSAGES; i++)
+    senders.reserve(NUM_MESSAGES);
+for (int i = 0; i < numMessages; i++)
     {
         senders.emplace_back([&, i]()
         {
-            std::vector<u8> data = {static_cast<u8>(i)};
+            std::vector<std::byte> data = {static_cast<std::byte>(i)};
             client.Send(serverEvent.peer.id, std::move(data), 0, true);
         });
     }
     
     // Join senders
-    for (auto& t : senders)
+    for (auto& t : senders) {
         t.join();
+}
     
     // Wait for all messages to be received
     receiver.join();
     
-    REQUIRE(receivedCount == NUM_MESSAGES);
+    REQUIRE(receivedCount == numMessages);
     
     client.Stop();
     server.Stop();
@@ -529,14 +549,15 @@ TEST_CASE("Raw pointer send works correctly", "[data][raw-pointer]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12354}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
     ClearEvents(server);
     
     // Send using raw pointer
-    u8 rawData[] = {10, 20, 30, 40, 50};
+    std::byte rawData[] = {b(10), b(20), b(30), b(40), b(50)};
     client.Send(serverEvent.peer.id, rawData, sizeof(rawData), 0, true);
     
     // Server should receive
@@ -544,8 +565,9 @@ TEST_CASE("Raw pointer send works correctly", "[data][raw-pointer]")
     REQUIRE(serverEvent.type == NetworkEventType::RECEIVE);
     REQUIRE(serverEvent.data.size() == sizeof(rawData));
     
-    for (size_t i = 0; i < sizeof(rawData); i++)
+    for (size_t i = 0; i < sizeof(rawData); i++) {
         REQUIRE(serverEvent.data[i] == rawData[i]);
+}
     
     client.Stop();
     server.Stop();
@@ -568,7 +590,8 @@ TEST_CASE("Stop and start cycle works correctly", "[lifecycle]")
     // Connect
     client.Connect(Address{"127.0.0.1", 12355}, 0);
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     REQUIRE(WaitForEvent(server, serverEvent));
     REQUIRE(WaitForEvent(client, clientEvent));
     
@@ -581,7 +604,7 @@ TEST_CASE("Stop and start cycle works correctly", "[lifecycle]")
     ClearEvents(client);
     
     // Try to send while stopped (should not crash)
-    std::vector<u8> data = {1, 2, 3};
+    std::vector<std::byte> data = {b(1), b(2), b(3)};
     REQUIRE_NOTHROW(client.Send(serverEvent.peer.id, std::move(data), 0, true));
     
     REQUIRE_FALSE(WaitForEvent(server, serverEvent, 50ms));
@@ -615,14 +638,15 @@ TEST_CASE("Commands queued before start are processed", "[queuing]")
     // Queue commands before starting
     client.Connect(Address{"127.0.0.1", 12356}, 0);
     
-    std::vector<u8> data = {1, 2, 3};
+    std::vector<std::byte> data = {b(1), b(2), b(3)};
     client.Send(1, std::move(data), 0, true);
     
     // Now start - should process queued commands
     server.Start();
     client.Start();
     
-    NetworkEvent serverEvent, clientEvent;
+    NetworkEvent serverEvent;
+    NetworkEvent clientEvent;
     
     // Should eventually connect
     REQUIRE(WaitForEvent(server, serverEvent, 500ms));
@@ -651,7 +675,8 @@ TEST_CASE("Multiple connection/disconnection cycles work", "[cycles]")
         // Connect
         client.Connect(Address{"127.0.0.1", 12357}, cycle);
         
-        NetworkEvent serverEvent, clientEvent;
+        NetworkEvent serverEvent;
+        NetworkEvent clientEvent;
         REQUIRE(WaitForEvent(server, serverEvent));
         REQUIRE(WaitForEvent(client, clientEvent));
         

@@ -32,8 +32,9 @@ public:
 	void Connect(const Address& address, const u32 data = 0);
 	void Disconnect(const PeerId peerId, const u32 data = 0);
 
-	void Send(const PeerId peerId, std::vector<u8>&& data, const ChannelId channel = 0, const bool reliable = true);
-	void Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel = 0,
+	void Send(const PeerId peerId, std::vector<std::byte>&& data, const ChannelId channel = 0,
+	const bool reliable = true);
+	void Send(const PeerId peerId, const std::byte* data, const u32 size, const ChannelId channel = 0,
 	const bool reliable = true);
 
 	bool PopEvent(NetworkEvent& event);
@@ -54,7 +55,7 @@ private:
 		PeerId peerId = 0;
 		Address address;
 		u32 extraData = 0;
-		std::vector<u8> data;
+		std::vector<std::byte> data;
 		ChannelId channel = 0;
 		bool reliable = true;
 	};

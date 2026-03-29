@@ -12,17 +12,10 @@
 #include <atomic>
 #include <cstring>
 
-#ifdef TESTS
-#include "catch2/catch_test_macros.hpp"
-
-TEST_CASE("Test test", "[init]")
+namespace
 {
-	REQUIRE(true);
+	std::atomic<u32> s_instances = 0;
 }
-
-#endif
-
-static std::atomic<u32> s_instances = 0;
 
 NetworkCore::NetworkCore()
 {
@@ -193,7 +186,7 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 	}
 }
 
-bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const ChannelId channel, const bool reliable)
+bool NetworkCore::Send(const PeerId peerId, std::vector<std::byte>&& data, const ChannelId channel, const bool reliable)
 {
 	Peer peer = m_peerManager.GetPeer(peerId);
 
@@ -209,7 +202,8 @@ bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const Channe
 		return false;
 	}
 
-	_ENetPacket* packet = enet_packet_create(data.data(), data.size(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
+	_ENetPacket* packet =
+	enet_packet_create(reinterpret_cast<u8*>(data.data()), data.size(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 
 	if (!packet)
 	{
@@ -228,7 +222,7 @@ bool NetworkCore::Send(const PeerId peerId, std::vector<u8>&& data, const Channe
 	return true;
 }
 
-bool NetworkCore::Send(const PeerId peerId, const u8* data, const u32 size, const ChannelId channel,
+bool NetworkCore::Send(const PeerId peerId, const std::byte* data, const u32 size, const ChannelId channel,
 const bool reliable)
 {
 	Peer peer = m_peerManager.GetPeer(peerId);
@@ -245,7 +239,8 @@ const bool reliable)
 		return false;
 	}
 
-	_ENetPacket* packet = enet_packet_create(data, size, reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
+	_ENetPacket* packet =
+	enet_packet_create(reinterpret_cast<const u8*>(data), size, reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 
 	if (!packet)
 	{
@@ -290,7 +285,7 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 
 		Peer newPeer = m_peerManager.AddPeer(event.peer, address, ConnectionState::CONNECTED);
 
-		std::vector<u8> data(4);
+		std::vector<std::byte> data(4);
 		Assert(sizeof(event.data) == data.size(), "memcpy size must match");
 		memcpy(data.data(), &event.data, data.size());
 
@@ -301,7 +296,7 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 	{
 		peer.state = ConnectionState::CONNECTED;
 		m_peerManager.EditPeer(peer);
-		events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::CONNECT, peer, 0, std::vector<std::byte>());
 	}
 }
 
@@ -316,12 +311,12 @@ void NetworkCore::HandleDisconnect(const _ENetEvent& event, std::queue<NetworkEv
 
 	if (peer.state == ConnectionState::CONNECTING)
 	{
-		events.emplace(NetworkEventType::FAILED_CONNECTION, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::FAILED_CONNECTION, peer, 0, std::vector<std::byte>());
 	}
 
 	else
 	{
-		events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<u8>());
+		events.emplace(NetworkEventType::DISCONNECT, peer, 0, std::vector<std::byte>());
 	}
 
 	m_peerManager.RemovePeer(peer.id);
@@ -337,7 +332,9 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 		return;
 	}
 
-	std::vector<u8> data(event.packet->data, event.packet->data + event.packet->dataLength);
+	std::byte* ptr = reinterpret_cast<std::byte*>(event.packet->data);
+
+	std::vector<std::byte> data(ptr, ptr + event.packet->dataLength);
 	enet_packet_destroy(event.packet);
 
 	events.emplace(NetworkEventType::RECEIVE, peer, event.channelID, data);
@@ -358,7 +355,7 @@ void NetworkCore::AddCompression(_ENetHost* const host)
 size_t Compress([[maybe_unused]] void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit,
 unsigned char* output, size_t outputLimit)
 {
-	std::vector<u8> inputData(inputLimit);
+	std::vector<std::byte> inputData(inputLimit);
 
 	size_t offset = 0;
 
@@ -369,7 +366,7 @@ unsigned char* output, size_t outputLimit)
 	}
 
 	uLongf outputLength = outputLimit;
-	size_t result = compress2(output, &outputLength, inputData.data(), inputLimit, Z_BEST_SPEED);
+	size_t result = compress2(output, &outputLength, reinterpret_cast<u8*>(inputData.data()), inputLimit, Z_BEST_SPEED);
 	return size_t(result == Z_OK ? outputLength : 0);
 }
 

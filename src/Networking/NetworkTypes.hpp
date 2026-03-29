@@ -48,9 +48,10 @@ struct NetworkEvent
 	NetworkEventType type = NetworkEventType::CONNECT;
 	Peer peer;
 	ChannelId channel = 0;
-	std::vector<u8> data;
+	std::vector<std::byte> data;
 
-	NetworkEvent(const NetworkEventType type, const Peer& peer, const ChannelId channel, const std::vector<u8>& data) :
+	NetworkEvent(const NetworkEventType type, const Peer& peer, const ChannelId channel,
+	const std::vector<std::byte>& data) :
 	type(type),
 	peer(peer),
 	channel(channel),
