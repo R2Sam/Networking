@@ -181,6 +181,11 @@ target_include_directories(networking
 target_compile_options(networking PRIVATE
   ${COMMON_FLAGS}
   $<$<CONFIG:Debug>:
+        -O0
+        -g3
+        -gdwarf-4
+        -fno-inline
+        -fno-omit-frame-pointer
         $<$<PLATFORM_ID:Linux>:
         -fsanitize=address
         -fsanitize=undefined>
