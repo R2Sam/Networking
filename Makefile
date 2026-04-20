@@ -69,6 +69,14 @@ fixChanges:
 	| grep -E '\.(cpp|hpp)$$' \
 	| xargs -r run-clang-tidy -quiet -fix -j$(JOBS) -p $(BUILD_DIR)
 
+	git diff --name-only --diff-filter=d \
+	| grep -E '\.(cpp|hpp)$$' \
+	| xargs -r run-clang-tidy -quiet -fix -j$(JOBS) -p $(BUILD_DIR)
+
 	git diff --cached --name-only --diff-filter=d \
+	| grep -E '\.(cpp|hpp)$$' \
+	| xargs -r -P$(JOBS) clang-format -i --Werror
+
+	git diff --name-only --diff-filter=d \
 	| grep -E '\.(cpp|hpp)$$' \
 	| xargs -r -P$(JOBS) clang-format -i --Werror
