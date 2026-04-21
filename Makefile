@@ -21,6 +21,7 @@ endif
 debug:
 	cmake -S $(SRC_DIR) -B $(BUILD_DIR) \
 	-DFETCHCONTENT_BASE_DIR=../.deps \
+	-DCMAKE_BUILD_TYPE=Debug \
 	-DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 	$(CMAKE_GENERATOR)
 	cmake --build $(BUILD_DIR) -j $(JOBS)
