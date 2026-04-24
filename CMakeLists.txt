@@ -244,7 +244,8 @@ target_compile_options(
 	networking
 	PRIVATE
 		$<$<BOOL:${IS_EMSCRIPTEN}>:
-			-s USE_PTHREADS
+			-pthread
+			-sUSE_PTHREADS
 		>
 )
 
@@ -252,9 +253,11 @@ target_link_options(
 	networking
 	PRIVATE
 		$<$<BOOL:${IS_EMSCRIPTEN}>:
-			-s USE_PTHREADS
-			-s ASYNCIFY
-			-s PROXY_TO_PTHREAD
+			-pthread
+			-sUSE_PTHREADS
+			-sASYNCIFY
+			-sASSERTIONS
+			-sPROXY_TO_PTHREAD
 		>
 )
 
