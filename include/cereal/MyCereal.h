@@ -1,38 +1,44 @@
 #pragma once
 
-#include <cereal/archives/binary.hpp>
+#include "cereal/archives/binary.hpp"
 
 #include <string>
 #include <sstream>
 #include <vector>
 
-template<typename T>
-std::vector<std::byte> Serialize(const T& object)
+template <class T>
+concept CerealSerializable =
+requires(cereal::BinaryOutputArchive& arOut, cereal::BinaryInputArchive& arIn, const T& obj)
 {
-	std::ostringstream oss(std::ios::binary);
-	{
-	    cereal::BinaryOutputArchive archive(oss);
-	    archive(object);
-	}
+    arOut(obj);
+    arIn(obj);
+};
 
-	std::string str = oss.str();
+template<CerealSerializable Object>
+std::vector<std::byte> Serialize(const Object& object)
+{
+    std::ostringstream oss(std::ios::binary);
+    cereal::BinaryOutputArchive archive(oss);
 
-	std::byte* ptr = reinterpret_cast<std::byte*>(str.data());
-	return std::vector<std::byte>(ptr, ptr + str.size());
+    archive(object);
+
+    std::string str = std::move(oss).str();
+
+    std::vector<std::byte> bytes(reinterpret_cast<std::byte*>(str.data()), reinterpret_cast<std::byte*>(str.data() + str.size()));
+
+    return bytes;
 }
 
-template<typename T>
-T Deserialize(const std::vector<std::byte>& data)
+template<CerealSerializable Object>
+Object Deserialize(const std::vector<std::byte>& bytes)
 {
-	T object;
+    std::string str(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 
-	std::string str((const char*)data.data(), data.size());
+    std::istringstream iss(std::move(str), std::ios::binary);
+    cereal::BinaryInputArchive archive(iss);
 
-	std::istringstream iss(str, std::ios::binary);
-	{
-	    cereal::BinaryInputArchive archive(iss);
-	    archive(object);
-	}
+    Object object;
+    archive(object);
 
-	return object;
+    return object;
 }

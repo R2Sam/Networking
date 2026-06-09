@@ -9,20 +9,22 @@
 
 using UUID = std::array<unsigned char, 16>;
 
+inline constexpr UUID NULL_UUID = {};
+
 namespace std
 {
 	template <>
 	struct hash<std::array<unsigned char, 16>>
 	{
-		std::size_t operator()(const std::array<unsigned char, 16>& uuid) const noexcept
+		u64 operator()(const std::array<unsigned char, 16>& uuid) const noexcept
 		{
-			std::size_t h = 0;
-			for (auto b : uuid)
+			u64 hash = 0;
+			for (const auto b : uuid)
 			{
-				h = (h * 31) ^ b;
+				hash = (hash * 31) ^ b;
 			}
 
-			return h;
+			return hash;
 		}
 	};
 }

@@ -85,6 +85,22 @@ void AsyncNetwork::PopEventBlocking(NetworkEvent& event)
 	m_eventQueue.wait_dequeue(event);
 }
 
+std::vector<Peer> AsyncNetwork::GetPeersBlocking()
+{
+	m_coreMutex.lock();
+	std::unordered_map<PeerId, Peer> peers = m_core.GetPeers();
+	m_coreMutex.unlock();
+
+	std::vector<Peer> vector;
+	vector.reserve(peers.size());
+	for (const auto& [id, peer] : peers)
+	{
+		vector.emplace_back(peer);
+	}
+
+	return vector;
+}
+
 void AsyncNetwork::Loop()
 {
 	const u32 timeoutMs = 10;
@@ -93,7 +109,9 @@ void AsyncNetwork::Loop()
 
 	while (m_running)
 	{
+		m_coreMutex.lock();
 		m_core.Poll(events, timeoutMs);
+		m_coreMutex.unlock();
 		while (!events.empty())
 		{
 			m_eventQueue.enqueue(events.front());
@@ -103,6 +121,7 @@ void AsyncNetwork::Loop()
 		Command command;
 		while (m_commandQueue.try_dequeue(command))
 		{
+			m_coreMutex.lock();
 			switch (command.type)
 			{
 			case CommandType::CONNECT:
@@ -115,6 +134,7 @@ void AsyncNetwork::Loop()
 				m_core.Send(command.peerId, std::move(command.data), command.channel, command.reliable);
 				break;
 			}
+			m_coreMutex.unlock();
 		}
 	}
 }

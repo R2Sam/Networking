@@ -40,13 +40,15 @@ public:
 	bool PopEvent(NetworkEvent& event);
 	void PopEventBlocking(NetworkEvent& event);
 
+	std::vector<Peer> GetPeersBlocking();
+
 private:
 
 	enum class CommandType : u8
 	{
 		CONNECT,
 		DISCONNECT,
-		SEND
+		SEND,
 	};
 
 	struct Command
@@ -64,6 +66,7 @@ private:
 
 	NetworkCore m_core;
 	std::jthread m_thread;
+	std::mutex m_coreMutex;
 	moodycamel::ConcurrentQueue<Command> m_commandQueue;
 	moodycamel::BlockingConcurrentQueue<NetworkEvent> m_eventQueue;
 	std::atomic<bool> m_running = false;
