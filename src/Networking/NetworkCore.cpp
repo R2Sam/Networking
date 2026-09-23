@@ -50,9 +50,10 @@ bool NetworkCore::InitServer(const u16 port, const u32 maxPeers, const u32 chann
 		return false;
 	}
 
-	Assert(port < 65000 && maxPeers < 4000 && channels < 255, "Port, maxPeers and channels must be in ranges");
+	Assert(port < 65000 && maxPeers < 4000 && maxPeers > 0 && channels < 255,
+	"Port, maxPeers and channels must be in ranges");
 
-	_ENetAddress addr;
+	_ENetAddress addr = {};
 	addr.host = ENET_HOST_ANY;
 	addr.port = port;
 
@@ -77,7 +78,7 @@ bool NetworkCore::InitClient(const u32 maxPeers, const u32 channels)
 		return false;
 	}
 
-	Assert(maxPeers < 4000 && channels < 255, "MaxPeers and channels must be in ranges");
+	Assert(maxPeers < 4000 && maxPeers > 0 && channels < 255, "MaxPeers and channels must be in ranges");
 
 	m_host = enet_host_create(nullptr, maxPeers, channels, 0, 0);
 
@@ -94,6 +95,8 @@ bool NetworkCore::InitClient(const u32 maxPeers, const u32 channels)
 
 void NetworkCore::Shutdown()
 {
+	m_peerManager.Clear();
+
 	if (m_host)
 	{
 		enet_host_destroy(m_host);
@@ -108,7 +111,7 @@ Peer NetworkCore::Connect(const Address& address, const u32 data)
 		return {};
 	}
 
-	ENetAddress addr;
+	ENetAddress addr = {};
 	if (enet_address_set_host(&addr, address.ip.c_str()) < 0)
 	{
 		Logger::Write<LogLevel::WARN>("Failed to resolve ip ", address.ip);
@@ -138,6 +141,7 @@ void NetworkCore::Disconnect(const PeerId peerId, const u32 data)
 	}
 
 	peer.state = ConnectionState::DISCONNECTING;
+	m_peerManager.EditPeer(peer);
 
 	enet_peer_disconnect(peer.enetPeer, data);
 }
@@ -148,8 +152,11 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 
 	_ENetEvent event;
 
-	while (enet_host_service(m_host, &event, timeoutMs) > 0)
+	u32 timeout = timeoutMs;
+	while (enet_host_service(m_host, &event, timeout) > 0)
 	{
+		timeout = 0;
+
 		switch (event.type)
 		{
 		case ENET_EVENT_TYPE_CONNECT:
@@ -176,17 +183,29 @@ void NetworkCore::Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs)
 		}
 	}
 
-	for (u32 i = 0; i < m_host->peerCount; ++i)
+	double lastPingMs = m_pingStopwatch.Check();
+	if (lastPingMs == 0 || lastPingMs >= 500)
 	{
-		ENetPeer enetPeer = m_host->peers[i];
 
-		Peer peer = m_peerManager.GetPeerEnet(enetPeer.connectID);
-		peer.pingMs = enetPeer.roundTripTime;
-		m_peerManager.EditPeer(peer);
+		for (const auto& [peerId, peer] : m_peerManager.GetPeers())
+		{
+			if (peer.state != ConnectionState::CONNECTED || peer.enetPeer == nullptr)
+			{
+				continue;
+			}
+
+			Peer updatedPeer = peer;
+			updatedPeer.pingMs = peer.enetPeer->roundTripTime;
+			m_peerManager.EditPeer(updatedPeer);
+		}
+
+		m_pingStopwatch.Stop();
+		m_pingStopwatch.Start();
 	}
 }
 
-bool NetworkCore::Send(const PeerId peerId, std::vector<std::byte>&& data, const ChannelId channel, const bool reliable)
+bool NetworkCore::Send(const PeerId peerId, const std::vector<std::byte>& data, const ChannelId channel,
+const bool reliable)
 {
 	Peer peer = m_peerManager.GetPeer(peerId);
 
@@ -203,7 +222,7 @@ bool NetworkCore::Send(const PeerId peerId, std::vector<std::byte>&& data, const
 	}
 
 	_ENetPacket* packet =
-	enet_packet_create(reinterpret_cast<u8*>(data.data()), data.size(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
+	enet_packet_create(reinterpret_cast<const u8*>(data.data()), data.size(), reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 
 	if (!packet)
 	{
@@ -211,7 +230,7 @@ bool NetworkCore::Send(const PeerId peerId, std::vector<std::byte>&& data, const
 		return false;
 	}
 
-	u32 send = enet_peer_send(peer.enetPeer, channel, packet);
+	i32 send = enet_peer_send(peer.enetPeer, channel, packet);
 
 	if (send)
 	{
@@ -248,7 +267,7 @@ const bool reliable)
 		return false;
 	}
 
-	u32 send = enet_peer_send(peer.enetPeer, channel, packet);
+	i32 send = enet_peer_send(peer.enetPeer, channel, packet);
 
 	if (send)
 	{
@@ -264,7 +283,7 @@ Peer NetworkCore::GetPeer(const PeerId peerId) const
 	return m_peerManager.GetPeer(peerId);
 }
 
-std::unordered_map<PeerId, Peer> NetworkCore::GetPeers() const
+const std::unordered_map<PeerId, Peer>& NetworkCore::GetPeers() const
 {
 	return m_peerManager.GetPeers();
 }
@@ -277,10 +296,18 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 	{
 		Address address;
 
-		char hostBuf[256];
-		enet_address_get_host_ip(&event.peer->address, hostBuf, sizeof(hostBuf));
+		char hostBuf[256] = {};
+		if (enet_address_get_host_ip(&event.peer->address, hostBuf, sizeof(hostBuf)) != 0)
+		{
+			Logger::Write<LogLevel::WARN>("Failed to get host IP for connected peer");
+			address.ip = "unknown";
+		}
 
-		address.ip = hostBuf;
+		else
+		{
+			address.ip = hostBuf;
+		}
+
 		address.port = event.peer->address.port;
 
 		Peer newPeer = m_peerManager.AddPeer(event.peer, address, ConnectionState::CONNECTED);
@@ -289,7 +316,7 @@ void NetworkCore::HandleConnect(const _ENetEvent& event, std::queue<NetworkEvent
 		Assert(sizeof(event.data) == data.size(), "memcpy size must match");
 		memcpy(data.data(), &event.data, data.size());
 
-		events.emplace(NetworkEventType::CONNECT, newPeer, 0, data);
+		events.emplace(NetworkEventType::CONNECT, newPeer, 0, std::move(data));
 	}
 
 	else
@@ -329,15 +356,22 @@ void NetworkCore::HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent
 	// Tough should we do something I don't think this is supposed to happen
 	if (!peer.enetPeer)
 	{
+		enet_packet_destroy(event.packet);
 		return;
 	}
 
 	std::byte* ptr = reinterpret_cast<std::byte*>(event.packet->data);
 
-	std::vector<std::byte> data(ptr, ptr + event.packet->dataLength);
+	std::vector<std::byte> data;
+
+	if (event.packet->dataLength)
+	{
+		data.assign(ptr, ptr + event.packet->dataLength);
+	}
+
 	enet_packet_destroy(event.packet);
 
-	events.emplace(NetworkEventType::RECEIVE, peer, event.channelID, data);
+	events.emplace(NetworkEventType::RECEIVE, peer, event.channelID, std::move(data));
 }
 
 static size_t Compress(void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit,
@@ -361,6 +395,11 @@ unsigned char* output, size_t outputLimit)
 
 	for (size_t i = 0; i < bufferCount; ++i)
 	{
+		if (offset + buffers[i].dataLength > inputLimit)
+		{
+			return 0;
+		}
+
 		memcpy(inputData.data() + offset, buffers[i].data, buffers[i].dataLength);
 		offset += buffers[i].dataLength;
 	}
@@ -375,5 +414,6 @@ size_t outputLength)
 {
 	uLongf outputLengthULongf = outputLength;
 	u32 result = uncompress(output, &outputLengthULongf, input, inputLength);
-	return size_t(result == Z_OK);
+
+	return (result == Z_OK ? outputLengthULongf : 0);
 }

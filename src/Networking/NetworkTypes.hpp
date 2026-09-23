@@ -51,11 +51,11 @@ struct NetworkEvent
 	std::vector<std::byte> data;
 
 	NetworkEvent(const NetworkEventType type, const Peer& peer, const ChannelId channel,
-	const std::vector<std::byte>& data) :
+	std::vector<std::byte>&& data) :
 	type(type),
 	peer(peer),
 	channel(channel),
-	data(data)
+	data(std::move(data))
 	{
 	}
 

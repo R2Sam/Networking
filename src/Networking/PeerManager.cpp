@@ -6,6 +6,8 @@
 
 Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const ConnectionState state)
 {
+	Assert(enetPeer, "Cannot pass an invalid enetPeer");
+
 	PeerId id = AllocateId();
 
 	Peer peer;
@@ -15,8 +17,6 @@ Peer PeerManager::AddPeer(_ENetPeer* enetPeer, const Address& address, const Con
 	peer.state = state;
 
 	m_peers.emplace(id, peer);
-
-	Assert(enetPeer, "Cannot pass an invalid enetPeer");
 
 	m_enetIds.emplace(enetPeer->connectID, id);
 
@@ -37,7 +37,7 @@ Peer PeerManager::AddPeer(const ws_cli_conn_t wsPeer, const Address& address, co
 
 	m_wsIds.emplace(wsPeer, id);
 
-	return peer;
+	return m_peers[id];
 }
 
 bool PeerManager::EditPeer(const Peer& peer)
@@ -74,6 +74,7 @@ void PeerManager::RemovePeer(const PeerId peerId)
 		{
 			m_enetIds.erase(peer.enetPeer->connectID);
 		}
+
 		m_wsIds.erase(peer.wsPeer);
 	}
 
@@ -102,8 +103,27 @@ void PeerManager::RemovePeer(const PeerId peerId)
 		m_wsIds.erase(wsId);
 	}
 
-	m_peers.erase(it);
+	if (it != m_peers.end())
+	{
+		m_peers.erase(it);
+	}
+
 	FreeId(peerId);
+}
+
+void PeerManager::Clear()
+{
+	std::vector<PeerId> peers;
+	peers.reserve(m_peers.size());
+	for (const auto& pair : m_peers)
+	{
+		peers.emplace_back(pair.first);
+	}
+
+	for (const PeerId peerId : peers)
+	{
+		RemovePeer(peerId);
+	}
 }
 
 Peer PeerManager::GetPeer(const PeerId peerId) const
@@ -142,7 +162,7 @@ Peer PeerManager::GetPeerWs(const ws_cli_conn_t wsPeer) const
 	return peer;
 }
 
-std::unordered_map<PeerId, Peer> PeerManager::GetPeers() const
+const std::unordered_map<PeerId, Peer>& PeerManager::GetPeers() const
 {
 	return m_peers;
 }
@@ -155,6 +175,11 @@ PeerId PeerManager::AllocateId()
 		m_freeIds.pop();
 
 		return id;
+	}
+
+	if (m_nextId == 0)
+	{
+		m_nextId = 1;
 	}
 
 	return m_nextId++;

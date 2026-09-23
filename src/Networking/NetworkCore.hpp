@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Timing.hpp"
 #include "Types.hpp"
 
 #include "NetworkTypes.hpp"
@@ -29,13 +30,13 @@ public:
 	void Disconnect(const PeerId peerId, const u32 data = 0);
 	void Poll(std::queue<NetworkEvent>& events, const u32 timeoutMs = 0);
 
-	bool Send(const PeerId peerId, std::vector<std::byte>&& data, const ChannelId channel = 0,
+	bool Send(const PeerId peerId, const std::vector<std::byte>& data, const ChannelId channel = 0,
 	const bool reliable = true);
 	bool Send(const PeerId peerId, const std::byte* data, const u32 size, const ChannelId channel = 0,
 	const bool reliable = true);
 
 	Peer GetPeer(const PeerId peerId) const;
-	std::unordered_map<PeerId, Peer> GetPeers() const;
+	const std::unordered_map<PeerId, Peer>& GetPeers() const;
 
 private:
 
@@ -44,6 +45,8 @@ private:
 	void HandleReceive(const _ENetEvent& event, std::queue<NetworkEvent>& events);
 
 	static void AddCompression(_ENetHost* const host);
+
+	Stopwatch m_pingStopwatch;
 
 	_ENetHost* m_host = nullptr;
 
