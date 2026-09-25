@@ -2,21 +2,16 @@
 
 #include "Log/Log.hpp"
 
+#include <cstddef>
 #include <vector>
 
 static bool s_sodiumInitialized = false;
 
-static const std::string DEFAULT_KEY_HEX = "decefb8883cfe503d28b62d39428cdd2af82a77464cf0a1aff35f44113c856e7";
-unsigned char s_defaultKey[crypto_secretbox_KEYBYTES];
+static constexpr unsigned char DEFAULT_KEY[crypto_secretbox_KEYBYTES] = {0xde, 0xce, 0xfb, 0x88, 0x83, 0xcf, 0xe5, 0x03,
+0xd2, 0x8b, 0x62, 0xd3, 0x94, 0x28, 0xcd, 0xd2, 0xaf, 0x82, 0xa7, 0x74, 0x64, 0xcf, 0x0a, 0x1a, 0xff, 0x35, 0xf4, 0x41,
+0x13, 0xc8, 0x56, 0xe7};
 
-void FromHex(const std::string& hex, unsigned char* key)
-{
-	for (size_t i = 0; i < hex.length() / 2; ++i)
-	{
-		std::string byteString = hex.substr(i * 2, 2);
-		key[i] = static_cast<unsigned char>(std::stoi(byteString, nullptr, 16));
-	}
-}
+unsigned char s_defaultKey[crypto_secretbox_KEYBYTES];
 
 bool Encryption::InitEncryption()
 {
@@ -24,14 +19,13 @@ bool Encryption::InitEncryption()
 	{
 		if (sodium_init() < 0)
 		{
-			LogColor(LOG_RED, "Failed to initalize encryption");
+			LogColor(LOG_RED, "Failed to initialize encryption");
 			return false;
 		}
 
-		for (size_t i = 0; i < DEFAULT_KEY_HEX.length() / 2; ++i)
+		for (size_t i = 0; i < crypto_secretbox_KEYBYTES; ++i)
 		{
-			std::string byteString = DEFAULT_KEY_HEX.substr(i * 2, 2);
-			s_defaultKey[i] = static_cast<unsigned char>(std::stoi(byteString, nullptr, 16));
+			s_defaultKey[i] = DEFAULT_KEY[i];
 		}
 
 		s_sodiumInitialized = true;
@@ -40,154 +34,156 @@ bool Encryption::InitEncryption()
 	return true;
 }
 
-std::string Encryption::Encrypt(const std::string& data, const std::string& key)
+std::vector<std::byte> Encryption::Encrypt(const std::byte* data, const u32 dataSize, const std::vector<std::byte>& key)
 {
 	if (!s_sodiumInitialized)
 	{
-		return "";
+		return {};
 	}
 
 	if (key.size() != crypto_box_BEFORENMBYTES)
 	{
 		LogColor(LOG_RED, "Bad encryption key");
-
-		return "";
+		return {};
 	}
 
-	unsigned char nonce[crypto_secretbox_NONCEBYTES];
-	std::vector<unsigned char> ciphertext(crypto_secretbox_MACBYTES + data.size());
-
-	// Generate a random nonce
-	randombytes_buf(nonce, sizeof nonce);
-
-	unsigned char keyBuffer[crypto_box_BEFORENMBYTES];
-	for (unsigned int i = 0; i < key.size(); i++)
+	if (dataSize > 0 && data == nullptr)
 	{
-		keyBuffer[i] = (unsigned char)key[i];
+		return {};
 	}
 
-	// Encrypt the plaintext
-	if (crypto_box_easy_afternm(ciphertext.data(), reinterpret_cast<const unsigned char*>(data.data()), data.size(),
-		nonce, keyBuffer))
+	const size_t nonceSize = crypto_secretbox_NONCEBYTES;
+	const size_t macSize = crypto_secretbox_MACBYTES;
+	const size_t size = static_cast<size_t>(dataSize);
+
+	std::vector<std::byte> output(nonceSize + macSize + size);
+
+	randombytes_buf(output.data(), nonceSize);
+
+	if (crypto_box_easy_afternm(reinterpret_cast<unsigned char*>(output.data() + nonceSize),
+		reinterpret_cast<const unsigned char*>(data), size, reinterpret_cast<const unsigned char*>(output.data()),
+		reinterpret_cast<const unsigned char*>(key.data())))
 	{
 		LogColor(LOG_RED, "Failed to encrypt with key");
-
-		return "";
+		return {};
 	}
 
-	// Create a string to hold nonce and ciphertext
-	std::string nonceAndCiphertext(reinterpret_cast<char*>(nonce), sizeof(nonce));
-	nonceAndCiphertext.append(reinterpret_cast<char*>(ciphertext.data()), ciphertext.size());
-
-	return nonceAndCiphertext;
+	return output;
 }
 
-std::string Encryption::Decrypt(const std::string& encryptedData, const std::string& key)
+std::vector<std::byte> Encryption::Decrypt(const std::byte* encryptedData, const u32 encryptedSize,
+const std::vector<std::byte>& key)
 {
 	if (!s_sodiumInitialized)
 	{
-		return "";
+		return {};
 	}
 
 	if (key.size() != crypto_box_BEFORENMBYTES)
 	{
-		LogColor(LOG_RED, "Bad dencryption key");
-
-		return "";
+		LogColor(LOG_RED, "Bad decryption key");
+		return {};
 	}
 
-	// Ensure the message has at least space for nonce and MAC
-	if (encryptedData.size() < crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES)
+	if (encryptedData == nullptr)
 	{
-		LogColor(LOG_RED, "Ciphertext is too short ", encryptedData.size());
-		return "";
+		return {};
 	}
 
-	// Extract nonce and ciphertext
-	unsigned char nonce[crypto_secretbox_NONCEBYTES];
-	std::copy(encryptedData.begin(), encryptedData.begin() + crypto_secretbox_NONCEBYTES, nonce);
+	const size_t nonceSize = crypto_secretbox_NONCEBYTES;
+	const size_t macSize = crypto_secretbox_MACBYTES;
+	const size_t size = static_cast<size_t>(encryptedSize);
 
-	std::vector<unsigned char> ciphertext(encryptedData.begin() + crypto_secretbox_NONCEBYTES, encryptedData.end());
-
-	// Prepare buffer for decrypted plaintext
-	std::vector<unsigned char> decrypted(ciphertext.size() - crypto_secretbox_MACBYTES);
-
-	unsigned char keyBuffer[crypto_box_BEFORENMBYTES];
-	for (unsigned int i = 0; i < key.size(); i++)
+	if (size < nonceSize + macSize)
 	{
-		keyBuffer[i] = (unsigned char)key[i];
+		LogColor(LOG_RED, "Ciphertext is too short ", size);
+		return {};
 	}
 
-	// Decrypt the ciphertext
-	if (crypto_box_open_easy_afternm(decrypted.data(), ciphertext.data(), ciphertext.size(), nonce, keyBuffer) != 0)
+	const std::byte* nonce = encryptedData;
+	const std::byte* ciphertext = encryptedData + nonceSize;
+	const size_t ciphertextSize = size - nonceSize;
+
+	std::vector<std::byte> decrypted(ciphertextSize - macSize);
+
+	if (crypto_box_open_easy_afternm(reinterpret_cast<unsigned char*>(decrypted.data()),
+		reinterpret_cast<const unsigned char*>(ciphertext), ciphertextSize,
+		reinterpret_cast<const unsigned char*>(nonce), reinterpret_cast<const unsigned char*>(key.data())) != 0)
 	{
 		LogColor(LOG_RED, "Failed to decrypt with key");
-		return "";
+		return {};
 	}
 
-	// Convert decrypted data to a string and return
-	return std::string(reinterpret_cast<char*>(decrypted.data()), decrypted.size());
+	return decrypted;
 }
 
-std::string Encryption::Encrypt(const std::string& data)
+std::vector<std::byte> Encryption::Encrypt(const std::byte* data, const u32 dataSize)
 {
 	if (!s_sodiumInitialized)
 	{
-		return "";
+		return {};
 	}
 
-	unsigned char nonce[crypto_secretbox_NONCEBYTES];
-	std::vector<unsigned char> ciphertext(crypto_secretbox_MACBYTES + data.size());
-
-	// Generate a random nonce
-	randombytes_buf(nonce, sizeof nonce);
-
-	// Encrypt the plaintext
-	if (crypto_secretbox_easy(ciphertext.data(), reinterpret_cast<const unsigned char*>(data.data()), data.size(),
-		nonce, s_defaultKey))
+	if (dataSize > 0 && data == nullptr)
 	{
-		return "";
+		return {};
 	}
 
-	// Create a string to hold nonce and ciphertext
-	std::string nonceAndCiphertext(reinterpret_cast<char*>(nonce), sizeof(nonce));
-	nonceAndCiphertext.append(reinterpret_cast<char*>(ciphertext.data()), ciphertext.size());
+	const size_t nonceSize = crypto_secretbox_NONCEBYTES;
+	const size_t macSize = crypto_secretbox_MACBYTES;
+	const size_t size = static_cast<size_t>(dataSize);
 
-	return nonceAndCiphertext;
+	std::vector<std::byte> output(nonceSize + macSize + size);
+
+	randombytes_buf(output.data(), nonceSize);
+
+	if (crypto_secretbox_easy(reinterpret_cast<unsigned char*>(output.data() + nonceSize),
+		reinterpret_cast<const unsigned char*>(data), size, reinterpret_cast<const unsigned char*>(output.data()),
+		s_defaultKey))
+	{
+		return {};
+	}
+
+	return output;
 }
 
-std::string Encryption::Decrypt(const std::string& encryptedData)
+std::vector<std::byte> Encryption::Decrypt(const std::byte* encryptedData, const u32 encryptedSize)
 {
 	if (!s_sodiumInitialized)
 	{
-		return "";
+		return {};
 	}
 
-	// Ensure the message has at least space for nonce and MAC
-	if (encryptedData.size() < crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES)
+	if (encryptedData == nullptr)
 	{
-		LogColor(LOG_RED, "Ciphertext is too short ", encryptedData.size());
-		return "";
+		return {};
 	}
 
-	// Extract nonce and ciphertext
-	unsigned char nonce[crypto_secretbox_NONCEBYTES];
-	std::copy(encryptedData.begin(), encryptedData.begin() + crypto_secretbox_NONCEBYTES, nonce);
+	const size_t nonceSize = crypto_secretbox_NONCEBYTES;
+	const size_t macSize = crypto_secretbox_MACBYTES;
+	const size_t size = static_cast<size_t>(encryptedSize);
 
-	std::vector<unsigned char> ciphertext(encryptedData.begin() + crypto_secretbox_NONCEBYTES, encryptedData.end());
+	if (size < nonceSize + macSize)
+	{
+		LogColor(LOG_RED, "Ciphertext is too short ", size);
+		return {};
+	}
 
-	// Prepare buffer for decrypted plaintext
-	std::vector<unsigned char> decrypted(ciphertext.size() - crypto_secretbox_MACBYTES);
+	const std::byte* nonce = encryptedData;
+	const std::byte* ciphertext = encryptedData + nonceSize;
+	const size_t ciphertextSize = size - nonceSize;
 
-	// Decrypt the ciphertext
-	if (crypto_secretbox_open_easy(decrypted.data(), ciphertext.data(), ciphertext.size(), nonce, s_defaultKey) != 0)
+	std::vector<std::byte> decrypted(ciphertextSize - macSize);
+
+	if (crypto_secretbox_open_easy(reinterpret_cast<unsigned char*>(decrypted.data()),
+		reinterpret_cast<const unsigned char*>(ciphertext), ciphertextSize,
+		reinterpret_cast<const unsigned char*>(nonce), s_defaultKey) != 0)
 	{
 		LogColor(LOG_RED, "Failed to decrypt message (message may be tampered with)");
-		return "";
+		return {};
 	}
 
-	// Convert decrypted data to a string and return
-	return std::string(reinterpret_cast<char*>(decrypted.data()), decrypted.size());
+	return decrypted;
 }
 
 UUID Encryption::GenerateUUID()

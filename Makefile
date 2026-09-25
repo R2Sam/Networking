@@ -13,9 +13,11 @@ JOBS      := $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null 
 # ======================
 
 CMAKE_GENERATOR :=
+RUN_CMD := kitty -e bash -c "cd bin && ./networking; exec zsh"
 
 ifeq ($(OS), Windows_NT)
-	CMAKE_GENERATOR := -G "MinGW Makefiles"
+    CMAKE_GENERATOR := -G "MinGW Makefiles"
+    RUN_CMD = start cmd /k "cd bin && networking.exe"
 endif
 
 debug:
@@ -81,3 +83,6 @@ fixChanges:
 	git diff --name-only --diff-filter=d \
 	| grep -E '\.(cpp|hpp)$$' \
 	| xargs -r -P$(JOBS) clang-format -i --Werror
+
+run:
+	$(RUN_CMD)

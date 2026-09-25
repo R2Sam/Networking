@@ -14,10 +14,6 @@ include(FetchContent)
 set(FETCHCONTENT_QUIET ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
-
-option(BUILD_TESTING "Build tests" OFF)
-
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
@@ -162,14 +158,6 @@ endif()
 # Dependencies
 # -------------------------
 
-FetchContent_Declare(
-	ws
-	GIT_REPOSITORY "https://github.com/Theldus/wsServer"
-	GIT_TAG master
-	GIT_SHALLOW TRUE
-	EXCLUDE_FROM_ALL
-)
-
 if(EXISTS "/home/sam/Documents/Projects/Utils")
 	message(STATUS "Using local Utils repo")
 
@@ -190,15 +178,22 @@ else()
 	)
 endif()
 
-FetchContent_MakeAvailable(utils ws)
+FetchContent_MakeAvailable(utils)
 
 # -------------------------
 # Networking static library
 # -------------------------
 file(GLOB_RECURSE SRC CONFIGURE_DEPENDS src/*.cpp)
-list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
+# list(FILTER SRC EXCLUDE REGEX ".*/main\\.cpp$")
 
-add_library(networking STATIC ${SRC})
+# add_library(networking STATIC ${SRC})
+add_executable(networking ${SRC})
+
+set_target_properties(
+	networking
+	PROPERTIES
+	RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
 
 target_include_directories(
 	networking
@@ -233,7 +228,6 @@ target_link_libraries(
 		Networking::safety
 		Networking::platform
 
-		ws
 		sodium
 )
 
@@ -260,79 +254,3 @@ target_link_options(
 			-sPROXY_TO_PTHREAD
 		>
 )
-
-# -------------------------
-# Tests
-# -------------------------
-if(BUILD_TESTING)
-    include(CTest)
-    
-    FetchContent_Declare(
-        Catch2
-        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.4.0
-        GIT_SHALLOW TRUE
-    )
-
-    FetchContent_MakeAvailable(Catch2)
-
-    file(GLOB_RECURSE TEST_SRC CONFIGURE_DEPENDS src/*.cpp)
-    list(FILTER TEST_SRC EXCLUDE REGEX ".*/main\\.cpp$")
-    file(GLOB_RECURSE TESTS CONFIGURE_DEPENDS tests/*.cpp)
-
-    add_executable(
-        TestsNetworking
-        ${TEST_SRC}
-        ${TESTS}
-    )
-
-    target_include_directories(
-        TestsNetworking
-        PRIVATE
-            include
-            src
-            tests
-    )
-
-    target_compile_options(
-		TestsNetworking
-		PRIVATE
-			-Wall
-			-Wextra
-			-pedantic
-			-fmax-errors=5
-
-			-Wno-missing-field-initializers
-			-Wno-narrowing
-			-Wno-enum-compare
-			-Wno-reorder
-			-Wno-shadow
-			-Wno-deprecated-declarations
-	)
-
-    target_link_libraries(
-        TestsNetworking
-        PRIVATE
-            Networking::options
-            Networking::safety
-            Networking::platform
-
-            utils
-            ws
-            sodium
-
-            Catch2::Catch2WithMain
-    )
-
-    set_target_properties(
-        TestsNetworking
-        PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-    )
-
-    target_compile_definitions(TestsNetworking PRIVATE TESTS=1)
-
-    list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
-    include(Catch)
-    catch_discover_tests(TestsNetworking)
-endif()

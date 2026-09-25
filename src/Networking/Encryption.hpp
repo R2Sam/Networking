@@ -5,7 +5,9 @@
 #include "Types.hpp"
 
 #include <array>
-#include <string>
+#include <cstddef>
+#include <functional>
+#include <vector>
 
 using UUID = std::array<unsigned char, 16>;
 
@@ -33,15 +35,14 @@ extern unsigned char s_defaultKey[crypto_secretbox_KEYBYTES];
 
 namespace Encryption
 {
-	// Encryption and decryption
 	bool InitEncryption();
 
-	std::string Encrypt(const std::string& data, const std::string& key);
-	std::string Decrypt(const std::string& encryptedData, const std::string& key);
+	std::vector<std::byte> Encrypt(const std::byte* data, const u32 dataSize, const std::vector<std::byte>& key);
+	std::vector<std::byte> Decrypt(const std::byte* encryptedData, const u32 encryptedSize,
+	const std::vector<std::byte>& key);
 
-	// With defualt key
-	std::string Encrypt(const std::string& data);
-	std::string Decrypt(const std::string& encryptedData);
+	std::vector<std::byte> Encrypt(const std::byte* data, const u32 dataSize);
+	std::vector<std::byte> Decrypt(const std::byte* encryptedData, const u32 encryptedSize);
 
 	UUID GenerateUUID();
 }
