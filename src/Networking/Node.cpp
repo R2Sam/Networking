@@ -1,788 +1,603 @@
-#include "Node.hpp"
-
-#include "Networking/Networking.hpp"
+// Node.cpp
+#include "Networking/Node.hpp"
+#include "Log/Logger.hpp"
 #include "cereal/MyCereal.h"
-#include "cereal/types/vector.hpp"
-#include "cereal/types/string.hpp"
-#include "libsodium/sodium/randombytes.h"
 
-#include <cstring>
-#include <unordered_set>
+#include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <cstddef>
+#include <cstring>
+#include <queue>
+#include <random>
+#include <unordered_map>
+#include <vector>
+
+#include <cereal/types/string.hpp>
+#include <cereal/types/vector.hpp>
 
 namespace
 {
-	constexpr Networking::ChannelId ROUTING_CHANNEL = 1;
-	constexpr u32 RREQ_TIMEOUT_MS    = 5000;
-	constexpr u32 ROUTE_TIMEOUT_MS   = 10000;
-	constexpr u32 HELLO_INTERVAL_MS  = 1000;
-	constexpr u32 ANNOUNCE_INTERVAL_MS = 5000;
-	constexpr u32 PENDING_TIMEOUT_MS = 5000;
-	constexpr u8  DEFAULT_TTL        = 10;
+	using NodeId = Node::NodeId;
+	using PeerId = Networking::PeerId;
+	using ConnectionState = Networking::ConnectionState;
+
+	constexpr u32 ANNOUNCE_INTERVAL_MS = 1000;
+	constexpr u32 ANNOUNCE_TTL = 8;
+	constexpr u32 DATA_TTL = 16;
+	constexpr u32 ROUTE_TIMEOUT_MS = ANNOUNCE_INTERVAL_MS * 3;
+	constexpr u32 MAX_PENDING_PER_DEST = 32;
 
 	enum class PacketType : u8
 	{
-		RREQ,
-		RREP,
-		RERR,
-		DATA,
-		HELLO,
-		ANNOUNCE
+		ANNOUNCE = 1,
+		DATA = 2,
+		DEPARTURE = 3,
 	};
 
-	struct RREQ
+	struct Announce
 	{
-		Node::NodeId src = {};
-		Node::NodeId dst = {};
-
-		u32 srcSeq = {};
-		u32 dstSeq = {};
-
-		u32 reqId = {};
-		u8 hopCount = {};
-		u8 ttl = {};
+		NodeId originator = 0;
+		std::string name;
+		u32 seq = 0;
+		u32 ttl = 0;
 
 		template <class Archive>
-		void serialize(Archive& archive) // NOLINT
+		void serialize(Archive& ar) // NOLINT
 		{
-			archive(src, dst, srcSeq, dstSeq, reqId, hopCount, ttl);
-		}
-	};
-
-	struct RREP
-	{
-		Node::NodeId orig = {};
-		Node::NodeId dst = {};
-
-		u32 dstSeq = {};
-		u8 hopCount = {};
-		u32 lifetimeMs = {};
-
-		template <class Archive>
-		void serialize(Archive& archive) // NOLINT
-		{
-			archive(orig, dst, dstSeq, hopCount, lifetimeMs);
-		}
-	};
-
-	struct RERR
-	{
-		std::vector<Node::NodeId> unreachable;
-		u32 seq = {};
-
-		template <class Archive>
-		void serialize(Archive& archive) // NOLINT
-		{
-			archive(unreachable, seq);
+			ar(originator, name, seq, ttl);
 		}
 	};
 
 	struct Data
 	{
-		Node::NodeId src = {};
-		Node::NodeId dst = {};
-
-		std::vector<std::byte> data;
+		NodeId dst = 0;
+		NodeId src = 0;
+		u32 ttl = 0;
+		std::vector<u8> payload;
 
 		template <class Archive>
-		void serialize(Archive& archive) // NOLINT
+		void serialize(Archive& ar) // NOLINT
 		{
-			archive(src, dst, data);
+			ar(dst, src, ttl, payload);
 		}
 	};
 
-	struct Hello
+	struct Departure
 	{
-		Node::NodeId id = {};
-		u32 seq = {};
-		std::string name;
+		NodeId node = 0;
+		u32 ttl = ANNOUNCE_TTL;
 
 		template <class Archive>
-		void serialize(Archive& archive) // NOLINT
+		void serialize(Archive& ar) // NOLINT
 		{
-			archive(id, seq, name);
-		}
-	};
-
-	struct Announce
-	{
-		Node::NodeId id = {};
-		std::string name;
-		u32 seq = {};
-		u8 hopCount = {};
-		u8 ttl = {};
-
-		template <class Archive>
-		void serialize(Archive& archive) // NOLINT
-		{
-			archive(id, name, seq, hopCount, ttl);
+			ar(node, ttl);
 		}
 	};
 
 	struct RouteEntry
 	{
-		Networking::PeerId nextHop = {};
-		u32 hopCount = {};
-		u32 seq = {};
-		u64 expiryMs = {};
-		std::unordered_set<Networking::PeerId> precursors;
+		NodeId originator = 0;
+		std::string name;
+		PeerId nextHop = 0;
+		u32 seq = 0;
+		u32 metric = 0;
+		std::chrono::steady_clock::time_point lastSeen;
 	};
 
-	struct Pending
+	NodeId s_selfId = 0;
+	std::string s_selfName;
+	u32 s_selfSeq = 0;
+
+	std::unordered_map<NodeId, RouteEntry> s_routes;
+	std::unordered_map<NodeId, u32> s_seenSeq;
+	std::unordered_map<PeerId, NodeId> s_peerToNode;
+	std::unordered_map<NodeId, std::queue<std::vector<std::byte>>> s_pending;
+
+	std::chrono::steady_clock::time_point s_lastOgm{};
+
+	std::vector<std::byte> PackMessage(const PacketType type, const std::vector<std::byte>& body)
 	{
-		Node::NodeId dst = {};
 		std::vector<std::byte> data;
-		bool reliable = true;
-		u64 expireAt = {};
-	};
+		data.reserve(body.size() + 1);
 
-	Node::NodeId s_localId = {};
-	bool s_init = false;
-	u32 s_localSeq = {};
-	u32 s_nextReqId = {};
-	u64 s_lastHelloMs = {};
+		data.push_back(static_cast<std::byte>(type));
+		data.insert(data.end(), body.begin(), body.end());
 
-	std::unordered_map<Node::NodeId, RouteEntry> s_routingTable;
-	std::unordered_map<u64, u64> s_seenRreq;
-	std::unordered_map<Node::NodeId, u32> s_lastKnownSeq;
-	std::vector<Pending> s_pendingData;
-
-	std::string s_localName;
-	std::unordered_map<std::string, Node::NodeId> s_nameToId;
-	std::unordered_map<Node::NodeId, std::string> s_idToName;
-
-	u64 s_lastAnnounceMs = {};
-	std::unordered_map<Node::NodeId, u32> s_lastAnnounceSeq;
-
-	bool SeqNewer(const u32 a, const u32 b)
-	{
-		return static_cast<i32>(a - b) > 0;
+		return data;
 	}
 
-	u64 NowMs()
+	void SendRaw(const PeerId peer, const std::vector<std::byte>& data, const bool reliable)
 	{
-		static const auto s_start = std::chrono::steady_clock::now();
-		return static_cast<u64>(duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - s_start).count());
+		Networking::Send(peer, data, 0, reliable);
 	}
 
-	void SendPacket(const Networking::PeerId peer, const PacketType type, const std::vector<std::byte>& data, const bool reliable = true)
+	void Broadcast(const std::vector<std::byte>& data, const bool reliable, const PeerId except = 0)
 	{
-		std::vector<std::byte> buffer;
-		buffer.push_back(static_cast<std::byte>(type));
-		buffer.insert(buffer.end(), data.begin(), data.end());
-
-		Networking::Send(peer, buffer, ROUTING_CHANNEL, reliable);
-	}
-
-	void BroadcastPacket(const PacketType type, const std::vector<std::byte>& data, const bool reliable = true)
-	{
-		for (const Networking::PeerId peerId : Networking::GetPeerIds())
+		for (const PeerId peerId : Networking::GetPeerIds())
 		{
-			SendPacket(peerId, type, data, reliable);
-		}
-	}
-
-	void UpdateRoute(const Node::NodeId dst, const Networking::PeerId nextHop, const u32 hoptCount, const u32 seq, const u64 lifetimeMs)
-	{
-		auto it =s_routingTable.find(dst);
-		if (it == s_routingTable.end() || SeqNewer(seq, it->second.seq) || (seq == it->second.seq && hoptCount < it->second.hopCount))
-		{
-			RouteEntry entry;
-			entry.nextHop = nextHop;
-			entry.hopCount = hoptCount;
-			entry.seq = seq;
-			entry.expiryMs = NowMs() + lifetimeMs;
-
-			if (it != s_routingTable.end())
-			{
-				entry.precursors = std::move(it->second.precursors);
-			}
-
-			s_routingTable[dst] = std::move(entry);
-		}
-	}
-
-	void RemoveNameMapping(const Node::NodeId id)
-	{
-		auto it = s_idToName.find(id);
-		if (it == s_idToName.end())
-		{
-			return;
-		}
-
-		// Only erase the reverse mapping if it still points at this id.
-		auto jt = s_nameToId.find(it->second);
-		if (jt != s_nameToId.end() && jt->second == id)
-		{
-			s_nameToId.erase(jt);
-		}
-
-		s_idToName.erase(it);
-	}
-
-	void RemoveRoute(const Node::NodeId dst)
-	{
-		auto it = s_routingTable.find(dst);
-		if (it == s_routingTable.end())
-		{
-			return;
-		}
-
-		RERR rerr;
-		rerr.unreachable = {dst};
-		rerr.seq = it->second.seq + 1;
-
-		BroadcastPacket(PacketType::RERR, Serialize(rerr), true);
-
-		s_localSeq++;
-		s_lastKnownSeq[dst] = it->second.seq + 1;
-
-		s_routingTable.erase(it);
-		RemoveNameMapping(dst);
-	}
-
-	void SendRREQ(const Node::NodeId dst)
-	{
-		RREQ rreq;
-		rreq.src = s_localId;
-		rreq.dst = dst;
-		rreq.srcSeq = ++s_localSeq;
-		rreq.dstSeq = s_lastKnownSeq.contains(dst) ? s_lastKnownSeq[dst] : 0;
-		rreq.reqId = s_nextReqId++;
-		rreq.hopCount = 0;
-		rreq.ttl = DEFAULT_TTL;
-
-		s_seenRreq[static_cast<u64>(s_localId) << 32 | rreq.reqId] = NowMs();
-
-		BroadcastPacket(PacketType::RREQ, Serialize(rreq), false);
-	}
-
-	void SendDataVia(const Node::NodeId dst, const Networking::PeerId nextHop, const std::vector<std::byte>& data, const bool reliable)
-	{
-		Data dataPacket;
-		dataPacket.src = s_localId;
-		dataPacket.dst = dst;
-		dataPacket.data = data;
-
-		SendPacket(nextHop, PacketType::DATA, Serialize(dataPacket), reliable);
-
-		auto it = s_routingTable.find(dst);
-		if (it != s_routingTable.end())
-		{
-			it->second.precursors.insert(nextHop);
-		}
-	}
-
-	void SendHello()
-	{
-		Hello hello;
-		hello.id = s_localId;
-		hello.seq = ++s_localSeq;
-		hello.name = s_localName;
-
-		BroadcastPacket(PacketType::HELLO, Serialize(hello), false);
-	}
-
-	void SendAnnounce()
-	{
-		Announce announce;
-		announce.id = s_localId;
-		announce.name = s_localName;
-		announce.seq = ++s_localSeq;
-		announce.hopCount = 0;
-		announce.ttl = DEFAULT_TTL;
-
-		s_lastAnnounceSeq[s_localId] = announce.seq;
-
-		BroadcastPacket(PacketType::ANNOUNCE, Serialize(announce), false);
-	}
-
-	void HandleRREQ(const Networking::PeerId from, const RREQ& rreq)
-	{
-		const u64 key = (static_cast<u64>(rreq.src) << 32) | rreq.reqId;
-		if (s_seenRreq.contains(key))
-		{
-			return;
-		}
-
-		s_seenRreq[key] = NowMs();
-
-		UpdateRoute(rreq.src, from, rreq.hopCount + 1, rreq.srcSeq, ROUTE_TIMEOUT_MS);
-
-		// Destination: send RREP
-		if (rreq.dst == s_localId)
-		{
-			s_localSeq++;
-			s_lastKnownSeq[s_localId] = s_localSeq;
-
-			RREP rrep;
-			rrep.orig = rreq.src;
-			rrep.dst = s_localId;
-			rrep.dstSeq = s_localSeq;
-			rrep.hopCount = 0;
-			rrep.lifetimeMs = ROUTE_TIMEOUT_MS;
-
-			SendPacket(from, PacketType::RREP, Serialize(rrep), true);
-			return;
-		}
-
-		auto it = s_routingTable.find(rreq.dst);
-		if (it != s_routingTable.end() && it->second.expiryMs > NowMs() && !SeqNewer(rreq.dstSeq, it->second.seq))
-		{
-			RREP rrep;
-			rrep.orig = rreq.src;
-			rrep.dst  = rreq.dst;
-			rrep.dstSeq = it->second.seq;
-			rrep.hopCount  = static_cast<u8>(it->second.hopCount);
-			rrep.lifetimeMs = static_cast<u32>(it->second.expiryMs - NowMs());
-
-			SendPacket(from, PacketType::RREP, Serialize(rrep), true);
-			return;
-		}
-
-		if (rreq.ttl > 1)
-		{
-			RREQ fwd = rreq;
-			fwd.hopCount = rreq.hopCount + 1;
-			fwd.ttl      = rreq.ttl - 1;
-
-			BroadcastPacket(PacketType::RREQ, Serialize(fwd), false);
-		}
-	}
-
-	void HandleRREP(const Networking::PeerId from, const RREP& rrep)
-	{
-		UpdateRoute(rrep.dst, from, rrep.hopCount + 1, rrep.dstSeq, rrep.lifetimeMs);
-		s_lastKnownSeq[rrep.dst] = rrep.dstSeq;
-
-		// We are the originator
-		if (rrep.orig == s_localId)
-		{
-			auto routeIt = s_routingTable.find(rrep.dst);
-			if (routeIt == s_routingTable.end())
-			{
-				return;
-			}
-
-			for (auto it = s_pendingData.begin(); it != s_pendingData.end(); )
-			{
-				if (it->dst == rrep.dst)
-				{
-					SendDataVia(rrep.dst, routeIt->second.nextHop, it->data, it->reliable);
-					it = s_pendingData.erase(it);
-				}
-
-				else
-				{
-					++it;
-				}
-			}
-
-			return;
-		}
-
-		auto it = s_routingTable.find(rrep.orig);
-		if (it != s_routingTable.end())
-		{
-			RREP fwd = rrep;
-			fwd.hopCount = rrep.hopCount + 1;
-			SendPacket(it->second.nextHop, PacketType::RREP, Serialize(fwd), true);
-		}
-	}
-
-	void HandleRERR(const Networking::PeerId from, const RERR& rrer)
-	{
-		for (Node::NodeId dst : rrer.unreachable)
-		{
-			auto it = s_routingTable.find(dst);
-			if (it == s_routingTable.end() || it->second.nextHop != from)
+			if (peerId == except)
 			{
 				continue;
 			}
 
-			RERR fwd;
-			fwd.unreachable = {dst};
-			fwd.seq = it->second.seq + 1;
+			const auto peer = Networking::GetPeer(peerId);
+			if (!peer || peer->state != ConnectionState::CONNECTED)
+			{
+				continue;
+			}
 
-			BroadcastPacket(PacketType::RERR, Serialize(fwd), true);
-
-			s_lastKnownSeq[dst] = it->second.seq + 1;
-
-			s_routingTable.erase(it);
-			RemoveNameMapping(dst);
+			SendRaw(peerId, data, reliable);
 		}
 	}
 
-	void HandleData(const Networking::PeerId from, const Data& dataPacket, std::queue<Networking::Event>& events)
+	void UpdateSelfRoute()
 	{
-		if (dataPacket.dst == s_localId)
-		{
-			Networking::Event event;
-			event.type = Networking::EventType::RECEIVE;
-			event.channelId = ROUTING_CHANNEL;
-			event.peer.id = dataPacket.src;
-			event.data = dataPacket.data;
-			events.push(std::move(event));
-			return;
-		}
+		RouteEntry self;
+		self.originator = s_selfId;
+		self.name = s_selfName;
+		self.nextHop = 0;
+		self.seq = s_selfSeq;
+		self.metric = 0;
+		self.lastSeen = std::chrono::steady_clock::now();
+		s_routes[s_selfId] = self;
+	}
 
-		auto it = s_routingTable.find(dataPacket.dst);
-		if (it != s_routingTable.end() && it->second.expiryMs > NowMs())
+	void SendOwnAnnuounce(const PeerId onlyTo = 0)
+	{
+		Announce announce;
+		announce.originator = s_selfId;
+		announce.name = s_selfName;
+		announce.seq = ++s_selfSeq;
+		announce.ttl = ANNOUNCE_TTL;
+
+		const auto msg = PackMessage(PacketType::ANNOUNCE, Serialize(announce));
+
+		if (onlyTo != 0)
 		{
-			it->second.precursors.insert(from);
-			SendPacket(it->second.nextHop, PacketType::DATA, Serialize(dataPacket), true);
+			SendRaw(onlyTo, msg, false);
 		}
 
 		else
 		{
-			Pending pending;
-			pending.dst = dataPacket.dst;
-			pending.data = dataPacket.data;
-			pending.reliable = true;
-			pending.expireAt = NowMs() + PENDING_TIMEOUT_MS;
-
-			s_pendingData.push_back(std::move(pending));
-			SendRREQ(dataPacket.dst);
+			Broadcast(msg, false);
 		}
+
+		UpdateSelfRoute();
 	}
 
-	void HandleHello(const Networking::PeerId from, const Hello& hello)
+	void ForwardAnnounce(const Announce& annouce, const PeerId from)
 	{
-		for (auto& [dst, entry] : s_routingTable)
-		{
-			if (entry.nextHop == from)
-			{
-				entry.expiryMs = NowMs() + ROUTE_TIMEOUT_MS;
-			}
-		}
-
-		if (hello.id != s_localId)
-	    {
-	        UpdateRoute(hello.id, from, 1, hello.seq, ROUTE_TIMEOUT_MS);
-	        s_lastKnownSeq[hello.id] = hello.seq;
-	    }
-
-	    if (hello.id != s_localId && !hello.name.empty())
-	    {
-	    	auto idIt = s_idToName.find(hello.id);
-	    	if (idIt != s_idToName.end() && idIt->second != hello.name)
-	    	{
-	    		s_nameToId.erase(idIt->second);
-	    		s_idToName.erase(idIt);
-	    	}
-
-	    	auto nameIt = s_nameToId.find(hello.name);
-	    	if (nameIt != s_nameToId.end() && nameIt->second != hello.id)
-	    	{
-	    		s_idToName.erase(nameIt->second);
-	    	}
-
-	    	s_nameToId[hello.name] = hello.id;
-	    	s_idToName[hello.id] = hello.name;
-	    }
+		const auto msg = PackMessage(PacketType::ANNOUNCE, Serialize(annouce));
+		Broadcast(msg, false, from);
 	}
 
-	void HandleAnnounce(const Networking::PeerId from, const Announce& announce)
+	void FlushPending(const NodeId dst, const PeerId nextHop)
 	{
-		if (announce.id != s_localId)
-		{
-			UpdateRoute(announce.id, from, announce.hopCount + 1, announce.seq, ROUTE_TIMEOUT_MS);
-			s_lastKnownSeq[announce.id] = announce.seq;
-		}
-
-		if (announce.id != s_localId && !announce.name.empty())
-		{
-			auto idIt = s_idToName.find(announce.id);
-			if (idIt != s_idToName.end() && idIt->second != announce.name)
-			{
-				s_nameToId.erase(idIt->second);
-				s_idToName.erase(idIt);
-			}
-
-			auto nameIt = s_nameToId.find(announce.name);
-			if (nameIt != s_nameToId.end() && nameIt->second != announce.id)
-			{
-				s_idToName.erase(nameIt->second);
-			}
-
-			s_nameToId[announce.name] = announce.id;
-			s_idToName[announce.id] = announce.name;
-		}
-
-		auto it = s_lastAnnounceSeq.find(announce.id);
-		if (it != s_lastAnnounceSeq.end() && !SeqNewer(announce.seq, it->second))
+		auto it = s_pending.find(dst);
+		if (it == s_pending.end())
 		{
 			return;
 		}
-		s_lastAnnounceSeq[announce.id] = announce.seq;
 
-		if (announce.ttl > 1)
+		auto& q = it->second;
+		while (!q.empty())
 		{
-			Announce fwd = announce;
-			fwd.hopCount = announce.hopCount + 1;
-			fwd.ttl = announce.ttl - 1;
+			Data data;
+			data.dst = dst;
+			data.src = s_selfId;
+			data.ttl = DATA_TTL;
+			data.payload.resize(q.front().size());
 
-			BroadcastPacket(PacketType::ANNOUNCE, Serialize(fwd), false);
+			if (!q.front().empty())
+			{
+				std::memcpy(data.payload.data(), q.front().data(), q.front().size());
+			}
+			q.pop();
+
+			const auto msg = PackMessage(PacketType::DATA, Serialize(data));
+			SendRaw(nextHop, msg, true);
+		}
+
+		s_pending.erase(it);
+	}
+
+	void HandleAnnounce(const Announce& announce, const PeerId from)
+	{
+		if (announce.originator == s_selfId)
+		{
+			return;
+		}
+
+		const u32 metric = (announce.ttl <= ANNOUNCE_TTL) ? (ANNOUNCE_TTL - announce.ttl + 1) : 1;
+
+		auto it = s_routes.find(announce.originator);
+		bool update = false;
+
+		if (it == s_routes.end())
+		{
+			update = true;
+		}
+
+		else if (announce.seq > it->second.seq)
+		{
+			update = true;
+		}
+
+		else if (announce.seq == it->second.seq && metric < it->second.metric)
+		{
+			update = true;
+		}
+
+		if (update)
+		{
+			RouteEntry entry;
+			entry.originator = announce.originator;
+			entry.name = announce.name;
+			entry.nextHop = from;
+			entry.seq = announce.seq;
+			entry.metric = metric;
+			entry.lastSeen = std::chrono::steady_clock::now();
+			s_routes[announce.originator] = entry;
+
+			FlushPending(announce.originator, from);
+		}
+
+		else if (it != s_routes.end())
+		{
+			it->second.lastSeen = std::chrono::steady_clock::now();
+
+			if (!announce.name.empty() && it->second.name != announce.name)
+			{
+				it->second.name = announce.name;
+			}
+		}
+
+		if (metric == 1)
+		{
+			s_peerToNode[from] = announce.originator;
+		}
+
+		auto sit = s_seenSeq.find(announce.originator);
+		if (sit == s_seenSeq.end() || announce.seq > sit->second)
+		{
+			s_seenSeq[announce.originator] = announce.seq;
+
+			if (announce.ttl > 1)
+			{
+				Announce fwd = announce;
+				fwd.ttl = announce.ttl - 1;
+				ForwardAnnounce(fwd, from);
+			}
 		}
 	}
 
-	void Cleanup()
+	void HandleData(const Data& data, const PeerId from, std::queue<Networking::Event>& out)
 	{
-		const u64 time = NowMs();
-
-		for (auto it = s_routingTable.begin(); it != s_routingTable.end(); )
+		if (data.dst == s_selfId)
 		{
-			if (it->second.expiryMs <= time)
+			Networking::Event ev;
+			ev.type = Networking::EventType::RECEIVE;
+
+			if (const auto peer = Networking::GetPeer(from))
 			{
-				RemoveNameMapping(it->first);
-				it = s_routingTable.erase(it);
+				ev.peer = *peer;
 			}
 
+			ev.channelId = 0;
+			ev.data.resize(data.payload.size());
+
+			if (!data.payload.empty())
+			{
+				std::memcpy(ev.data.data(), data.payload.data(), data.payload.size());
+			}
+
+			out.push(std::move(ev));
+			return;
+		}
+
+		if (data.ttl == 0)
+		{
+			return;
+		}
+
+		auto it = s_routes.find(data.dst);
+		if (it == s_routes.end())
+		{
+			return;
+		}
+
+		if (it->second.nextHop == from)
+		{
+			return;
+		}
+
+		Data fwd = data;
+		fwd.ttl = data.ttl - 1;
+		const auto msg = PackMessage(PacketType::DATA, Serialize(fwd));
+		SendRaw(it->second.nextHop, msg, true);
+	}
+
+	void HandleDeparture(const Departure& departure, const PeerId from)
+	{
+		if (departure.node == s_selfId)
+		{
+			return;
+		}
+
+		bool removed = false;
+
+		auto it = s_routes.find(departure.node);
+		if (it != s_routes.end() && it->second.nextHop == from)
+		{
+			s_routes.erase(it);
+			s_pending.erase(departure.node);
+			removed = true;
+		}
+
+		if (removed && departure.ttl > 1)
+		{
+			Departure fwd = departure;
+			fwd.ttl = departure.ttl - 1;
+			const auto msg = PackMessage(PacketType::DEPARTURE, Serialize(fwd));
+			Broadcast(msg, false, from);
+		}
+	}
+
+	void RemoveRoutesVia(const PeerId peer)
+	{
+		s_peerToNode.erase(peer);
+
+		for (auto it = s_routes.begin(); it != s_routes.end();)
+		{
+			if (it->second.originator != s_selfId && it->second.nextHop == peer)
+			{
+				it = s_routes.erase(it);
+			}
 			else
 			{
 				++it;
 			}
 		}
+	}
 
-		for (auto it = s_seenRreq.begin(); it != s_seenRreq.end(); )
+	void ExpireRoutes()
+	{
+		const auto now = std::chrono::steady_clock::now();
+
+		for (auto it = s_routes.begin(); it != s_routes.end();)
 		{
-			if (time - it->second > RREQ_TIMEOUT_MS * 2)
+			if (it->second.originator == s_selfId)
 			{
-				it = s_seenRreq.erase(it);
+				++it;
+				continue;
 			}
 
+			const auto ageMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.lastSeen).count();
+
+			if (ageMs > ROUTE_TIMEOUT_MS)
+			{
+				s_pending.erase(it->first);
+				it = s_routes.erase(it);
+			}
 			else
 			{
 				++it;
 			}
-		}
-
-		for (auto it = s_pendingData.begin(); it != s_pendingData.end(); )
-		{
-			if (it->expireAt <= time)
-			{
-				it = s_pendingData.erase(it);
-			}
-
-			else
-			{
-				++it;
-			}
-		}
-
-		if (time - s_lastHelloMs >= HELLO_INTERVAL_MS)
-		{
-			SendHello();
-			s_lastHelloMs = time;
-		}
-
-		if (time - s_lastAnnounceMs >= ANNOUNCE_INTERVAL_MS)
-		{
-			SendAnnounce();
-			s_lastAnnounceMs = time;
 		}
 	}
 }
 
 bool Node::Init(const u16 port, const std::string& name)
 {
-	if (s_init)
+	const bool ok = (port == 0) ? Networking::InitClient() : Networking::InitServer(port);
+	if (!ok)
 	{
 		return false;
 	}
 
-	if (!Networking::InitServer(port, 100, 2))
+	std::random_device rd;
+	s_selfId = (static_cast<u64>(rd()) << 32) | static_cast<u64>(rd());
+	if (s_selfId == 0)
 	{
-		return false;
+		s_selfId = 1;
 	}
 
-	s_init = true;
+	s_selfName = name;
+	s_selfSeq = 0;
 
-	std::byte buffer[8] = {};
-	randombytes_buf(buffer, 8);
-	memcpy(&s_localId, buffer, 8);
+	s_routes.clear();
+	s_seenSeq.clear();
+	s_peerToNode.clear();
+	s_pending.clear();
 
-	s_localName = name;
+	UpdateSelfRoute();
 
-	s_lastHelloMs = NowMs();
-	SendAnnounce();
-	s_lastAnnounceMs = NowMs();
-
+	s_lastOgm = std::chrono::steady_clock::now() - std::chrono::milliseconds(ANNOUNCE_INTERVAL_MS);
 	return true;
 }
 
 void Node::Shutdown()
 {
+	s_routes.clear();
+	s_seenSeq.clear();
+	s_peerToNode.clear();
+	s_pending.clear();
+	s_selfId = 0;
+	s_selfSeq = 0;
+	s_selfName.clear();
+
 	Networking::Shutdown();
-
-	s_routingTable.clear();
-	s_seenRreq.clear();
-	s_lastKnownSeq.clear();
-	s_pendingData.clear();
-	s_nameToId.clear();
-	s_idToName.clear();
-	s_lastAnnounceSeq.clear();
-	s_localName.clear();
-
-	s_init = false;
 }
 
-std::optional<Networking::PeerId> Node::Connect(const Networking::Address& address)
+std::optional<PeerId> Node::Connect(const Networking::Address& address)
 {
 	return Networking::Connect(address);
 }
 
-std::optional<Networking::PeerId> Node::Connect(const std::string& ip, const u16 port)
+std::optional<PeerId> Node::Connect(const std::string& ip, const u16 port)
 {
 	return Networking::Connect(ip, port);
 }
 
-void Node::Disconnect(const Networking::PeerId peerId)
+void Node::Disconnect(const PeerId peerId)
 {
 	Networking::Disconnect(peerId);
 }
 
-void Node::Poll(std::queue<Networking::Event>& events, const u32 timeoutMs) // NOLINT
+void Node::Poll(std::queue<Networking::Event>& events, const u32 timeoutMs)
 {
-	if (!s_init)
-	{
-		return;
-	}
-
 	std::queue<Networking::Event> rawEvents;
 	Networking::Poll(rawEvents, timeoutMs);
 
-	while(!rawEvents.empty())
+	while (!rawEvents.empty())
 	{
-		Networking::Event event = std::move(rawEvents.front());
+		auto& event = rawEvents.front();
+
+		switch (event.type)
+		{
+		case Networking::EventType::CONNECT:
+			SendOwnAnnuounce(event.peer.id);
+			events.push(event);
+			break;
+
+		case Networking::EventType::FAILED_CONNECTION:
+			RemoveRoutesVia(event.peer.id);
+			events.push(event);
+			break;
+
+		case Networking::EventType::DISCONNECT:
+		{
+			auto it = s_peerToNode.find(event.peer.id);
+			if (it != s_peerToNode.end())
+			{
+				Departure departure;
+				departure.node = it->second;
+				departure.ttl = ANNOUNCE_TTL;
+				const auto msg = PackMessage(PacketType::DEPARTURE, Serialize(departure));
+				Broadcast(msg, false, event.peer.id);
+			}
+
+			RemoveRoutesVia(event.peer.id);
+			events.push(event);
+			break;
+		}
+
+		case Networking::EventType::RECEIVE:
+			if (!event.data.empty())
+			{
+				const auto type = static_cast<PacketType>(event.data[0]);
+				const std::vector<std::byte> body(event.data.begin() + 1, event.data.end());
+
+				if (type == PacketType::ANNOUNCE)
+				{
+					HandleAnnounce(Deserialize<Announce>(body), event.peer.id);
+				}
+				else if (type == PacketType::DATA)
+				{
+					HandleData(Deserialize<Data>(body), event.peer.id, events);
+				}
+				else if (type == PacketType::DEPARTURE)
+				{
+					HandleDeparture(Deserialize<Departure>(body), event.peer.id);
+				}
+			}
+			break;
+		}
+
 		rawEvents.pop();
-
-		if (event.type == Networking::EventType::RECEIVE && event.channelId == ROUTING_CHANNEL)
-		{
-			if (event.data.empty())
-			{
-				continue;
-			}
-
-			const PacketType type = static_cast<PacketType>(event.data[0]);
-			std::vector<std::byte> body(event.data.begin() + 1, event.data.end());
-
-			switch (type)
-			{
-				case PacketType::RREQ : HandleRREQ(event.peer.id, Deserialize<RREQ>(body)); break;
-				case PacketType::RREP: HandleRREP(event.peer.id, Deserialize<RREP>(body)); break;
-				case PacketType::RERR: HandleRERR(event.peer.id, Deserialize<RERR>(body)); break;
-				case PacketType::DATA: HandleData(event.peer.id, Deserialize<Data>(body), events); break;
-				case PacketType::HELLO: HandleHello(event.peer.id, Deserialize<Hello>(body)); break;
-				case PacketType::ANNOUNCE: HandleAnnounce(event.peer.id, Deserialize<Announce>(body)); break;
-				default: break;
-			}
-		}
-
-		else
-		{
-			events.push(std::move(event));
-
-			if (event.type == Networking::EventType::CONNECT)
-			{
-				SendAnnounce();
-			}
-
-			if (event.type == Networking::EventType::DISCONNECT)
-			{
-				std::vector<NodeId> broken;
-
-				for (auto& [dst, entry] : s_routingTable)
-				{
-					if (entry.nextHop == event.peer.id)
-					{
-						broken.push_back(dst);
-					}
-				}
-
-				for (const NodeId id : broken)
-				{
-					RemoveRoute(id);
-				}
-			}
-		}
 	}
 
-	Cleanup();
+	ExpireRoutes();
+
+	const auto now = std::chrono::steady_clock::now();
+	if (std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastOgm).count() >= ANNOUNCE_INTERVAL_MS)
+	{
+		s_lastOgm = now;
+		SendOwnAnnuounce();
+	}
 }
 
 bool Node::Send(const NodeId nodeId, const std::byte* data, const u32 size, const bool reliable)
 {
-	if (!s_init)
+	if (nodeId == 0 || nodeId == s_selfId)
 	{
 		return false;
 	}
 
-	std::vector<std::byte> vector(data, data + size);
-
-	auto it = s_routingTable.find(nodeId);
-	if (it != s_routingTable.end() && it->second.expiryMs > NowMs())
+	auto it = s_routes.find(nodeId);
+	if (it == s_routes.end())
 	{
-		SendDataVia(nodeId, it->second.nextHop, vector, reliable);
+		auto& q = s_pending[nodeId];
+		if (q.size() >= MAX_PENDING_PER_DEST)
+		{
+			return false;
+		}
+
+		q.emplace(data, data + size);
 		return true;
 	}
 
-	Pending pending;
-	pending.dst = nodeId;
-	pending.data = vector;
-	pending.reliable = reliable;
-	pending.expireAt = NowMs() + PENDING_TIMEOUT_MS;
-	s_pendingData.push_back(std::move(pending));
+	Data dataPacket;
+	dataPacket.dst = nodeId;
+	dataPacket.src = s_selfId;
+	dataPacket.ttl = DATA_TTL;
+	dataPacket.payload.resize(size);
 
-	SendRREQ(nodeId);
-	return true;
+	if (size > 0)
+	{
+		std::memcpy(dataPacket.payload.data(), data, size);
+	}
+
+	const auto msg = PackMessage(PacketType::DATA, Serialize(dataPacket));
+	return Networking::Send(it->second.nextHop, msg, 0, reliable);
 }
 
 bool Node::Send(const NodeId nodeId, const std::vector<std::byte>& data, const bool reliable)
 {
-	return Send(nodeId, data.data(), data.size(), reliable);
+	return Send(nodeId, data.data(), static_cast<u32>(data.size()), reliable);
 }
 
 bool Node::Send(const std::string& name, const std::byte* data, const u32 size, const bool reliable)
 {
-	auto it = s_nameToId.find(name);
-	if (it == s_nameToId.end())
+	if (name.empty())
 	{
 		return false;
 	}
 
-	return Send(it->second, data, size, reliable);
+	for (const auto& [id, entry] : s_routes)
+	{
+		if (entry.originator == s_selfId)
+		{
+			continue;
+		}
+
+		if (entry.name == name)
+		{
+			return Send(id, data, size, reliable);
+		}
+	}
+
+	return false;
 }
 
 bool Node::Send(const std::string& name, const std::vector<std::byte>& data, const bool reliable)
 {
-	auto it = s_nameToId.find(name);
-	if (it == s_nameToId.end())
-	{
-		return false;
-	}
-
-	return Send(it->second, data, reliable);
+	return Send(name, data.data(), static_cast<u32>(data.size()), reliable);
 }
 
 std::vector<std::pair<Node::Node, Networking::PeerId>> Node::GetRoutes()
 {
-	std::vector<std::pair<Node, Networking::PeerId>> vector;
-	vector.reserve(s_routingTable.size());
+	std::vector<std::pair<Node, Networking::PeerId>> result;
+	result.reserve(s_routes.size());
 
-	for (auto& [dst, entry] : s_routingTable)
+	for (const auto& [id, entry] : s_routes)
 	{
-		auto it = s_idToName.find(dst);
-		if (it != s_idToName.end())
-		{
-			vector.emplace_back(Node{dst, s_idToName[dst]}, entry.nextHop);
-		}
-
-		else
-		{
-			vector.emplace_back(Node{dst, ""}, entry.nextHop);
-		}
+		Node n;
+		n.id = entry.originator;
+		n.name = entry.name;
+		result.emplace_back(n, entry.nextHop);
 	}
 
-	return vector;
+	return result;
 }
