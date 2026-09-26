@@ -90,7 +90,7 @@ namespace
 
 			address.port = event.peer->address.port;
 
-			s_peers.emplace(id, InternalPeer{{id, address, 0, Networking::CONNECTED}, event.peer});
+			s_peers.emplace(id, InternalPeer{{id, address, 0, Networking::ConnectionState::CONNECTED}, event.peer});
 			s_enetPeers.emplace(event.peer, id);
 		}
 
@@ -100,14 +100,14 @@ namespace
 
 			Assert(s_peers.contains(id));
 
-			s_peers[id].peer.state = Networking::CONNECTED;
+			s_peers[id].peer.state = Networking::ConnectionState::CONNECTED;
 		}
 
 		std::vector<std::byte> data(4);
 		Assert(data.size() == sizeof(event.data));
 		memcpy(data.data(), &event.data, data.size());
 
-		events.emplace(Networking::CONNECT, s_peers[id].peer, event.channelID, data);
+		events.emplace(Networking::EventType::CONNECT, s_peers[id].peer, event.channelID, data);
 	}
 
 	void HandleDisconnect(const ENetEvent& event, std::queue<Networking::Event>& events)
@@ -122,9 +122,10 @@ namespace
 
 		Networking::ConnectionState state = s_peers[id].peer.state;
 
-		events.emplace(state == Networking::CONNECTED || state == Networking::DISCONNECTING
-					   ? Networking::DISCONNECT
-					   : Networking::FAILED_CONNECTION,
+		events.emplace(state == Networking::ConnectionState::CONNECTED ||
+					   state == Networking::ConnectionState::DISCONNECTING
+					   ? Networking::EventType::DISCONNECT
+					   : Networking::EventType::FAILED_CONNECTION,
 		s_peers[id].peer, event.channelID, data);
 
 		s_peers.erase(id);
@@ -142,7 +143,7 @@ namespace
 		std::vector<std::byte> data = Encryption::Decrypt(ptr, event.packet->dataLength);
 		enet_packet_destroy(event.packet);
 
-		events.emplace(Networking::RECEIVE, s_peers[id].peer, event.channelID, std::move(data));
+		events.emplace(Networking::EventType::RECEIVE, s_peers[id].peer, event.channelID, std::move(data));
 	}
 
 	size_t Compress([[maybe_unused]] void* context, const ENetBuffer* buffers, size_t bufferCount, size_t inputLimit,
@@ -241,7 +242,7 @@ bool Networking::InitClient(const u32 maxPeers, const u32 channels)
 	return true;
 }
 
-void Networking::Close()
+void Networking::Shutdown()
 {
 	if (s_enetInit)
 	{
@@ -287,7 +288,7 @@ std::optional<Networking::PeerId> Networking::Connect(const Address& address, co
 
 	PeerId id = ConvertPeerId(peer);
 
-	s_peers.emplace(id, InternalPeer{{id, address, 0, Networking::CONNECTING}, peer});
+	s_peers.emplace(id, InternalPeer{{id, address, 0, Networking::ConnectionState::CONNECTING}, peer});
 	s_enetPeers.emplace(peer, id);
 
 	return id;
@@ -308,13 +309,13 @@ void Networking::Disconnect(const PeerId peerId, const u32 data)
 
 	InternalPeer& internalPeer = it->second;
 
-	if (internalPeer.peer.state != Networking::CONNECTED)
+	if (internalPeer.peer.state != Networking::ConnectionState::CONNECTED)
 	{
 		Logger::Write<LogLevel::WARN>("Tried to disconnect peer: ", peerId, " that is not connected");
 		return;
 	}
 
-	internalPeer.peer.state = Networking::DISCONNECTING;
+	internalPeer.peer.state = Networking::ConnectionState::DISCONNECTING;
 
 	enet_peer_disconnect(internalPeer.enetPeer, data);
 }

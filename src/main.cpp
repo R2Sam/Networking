@@ -1,6 +1,8 @@
-#include "Networking/Networking.hpp"
+#include "Networking/Node.hpp"
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -12,6 +14,19 @@
 static std::mutex s_cmdMutex;
 static std::queue<std::string> s_commands;
 static std::atomic<bool> s_running{true};
+
+static bool IsNumeric(const std::string& s)
+{
+	if (s.empty())
+	{
+		return false;
+	}
+
+	return std::all_of(s.begin(), s.end(), [](unsigned char c)
+	{
+		return std::isdigit(c) != 0;
+	});
+}
 
 static void InputThread()
 {
@@ -33,19 +48,24 @@ int main() // NOLINT
 	std::cin >> port;
 	std::cin.ignore(); // consume newline
 
-	if (!Networking::InitServer(port))
+	std::cout << "Enter node name: ";
+	std::string name;
+	std::getline(std::cin, name);
+
+	if (!Node::Init(port, name))
 	{
 		std::cerr << "Failed to init server on port " << port << "\n";
 		return 1;
 	}
 
-	std::cout << "Server started on port " << port << ".\n"
+	std::cout << "Server started on port " << port << " as \"" << name << "\".\n"
 			  << "Commands:\n"
-			  << "  connect <ip>:<port>   - connect to a peer\n"
-			  << "  disconnect <peerId>   - disconnect a peer\n"
-			  << "  send <peerId> <text>  - send a message to a peer\n"
-			  << "  list                  - lists all peers\n"
-			  << "  quit                  - exit\n\n";
+			  << "  connect <ip>:<port>         - connect to a peer\n"
+			  << "  disconnect <peerId>         - disconnect a peer\n"
+			  << "  send <nodeId|name> <text>   - send a message\n"
+			  << "  list                        - lists all direct peers\n"
+			  << "  nodes                       - lists all known nodes\n"
+			  << "  quit                        - exit\n\n";
 
 	std::thread input(InputThread);
 
@@ -69,7 +89,7 @@ int main() // NOLINT
 
 				if (cmd == "list")
 				{
-					std::cout << "Peers: " << "\n";
+					std::cout << "Peers:\n";
 
 					std::vector<Networking::PeerId> ids = Networking::GetPeerIds();
 					for (const auto id : ids)
@@ -81,8 +101,23 @@ int main() // NOLINT
 					}
 
 					std::cout << "\n";
+					continue;
+				}
 
-					break;
+				if (cmd == "nodes")
+				{
+					std::cout << "Nodes:\n";
+
+					std::vector<std::pair<Node::Node, Networking::PeerId>> routes = Node::GetRoutes();
+
+					for (const auto& [node, nextHop] : routes)
+					{
+						std::cout << " | NodeId: " << node.id << " | Name: " << (node.name.empty() ? "-" : node.name)
+								  << " | NextHop(conn): " << nextHop << "\n";
+					}
+
+					std::cout << "\n";
+					continue;
 				}
 
 				std::istringstream iss(cmd);
@@ -104,7 +139,7 @@ int main() // NOLINT
 					std::string ip = addrStr.substr(0, colon);
 					u16 port = static_cast<u16>(std::stoi(addrStr.substr(colon + 1)));
 					Networking::Address addr{ip, port};
-					std::optional<Networking::PeerId> id = Networking::Connect(addr);
+					std::optional<Networking::PeerId> id = Node::Connect(addr);
 
 					if (id == std::nullopt)
 					{
@@ -121,15 +156,15 @@ int main() // NOLINT
 				{
 					Networking::PeerId id;
 					iss >> id;
-					Networking::Disconnect(id);
+					Node::Disconnect(id);
 				}
 
 				else if (action == "send")
 				{
-					Networking::PeerId id;
-					if (!(iss >> id))
+					std::string target;
+					if (!(iss >> target))
 					{
-						std::cout << "usage: send <peerId> <text>\n";
+						std::cout << "usage: send <nodeId|name> <text>\n";
 						continue;
 					}
 
@@ -144,14 +179,28 @@ int main() // NOLINT
 					std::vector<std::byte> data(text.size());
 					memcpy(data.data(), text.data(), text.size());
 
-					if (Networking::Send(id, data))
+					bool ok = false;
+
+					if (IsNumeric(target))
 					{
-						std::cout << "Sent " << data.size() << " bytes to " << id << "\n";
+						Node::NodeId id = std::stoull(target);
+						ok = Node::Send(id, data);
 					}
 
 					else
 					{
-						std::cout << "Failed to send to " << id << "\n";
+						ok = Node::Send(target, data);
+					}
+
+					if (ok)
+					{
+						std::cout << "Sent " << data.size() << " bytes to " << target << "\n";
+					}
+
+					else
+					{
+						std::cout << "Failed to send to " << target
+								  << " (unknown name, or no route and pending queue full)\n";
 					}
 				}
 
@@ -163,7 +212,7 @@ int main() // NOLINT
 		}
 
 		// Poll networking for events
-		Networking::Poll(events, 100);
+		Node::Poll(events, 100);
 
 		while (!events.empty())
 		{
@@ -171,16 +220,16 @@ int main() // NOLINT
 			const char* eventTypeStr;
 			switch (e.type)
 			{
-			case Networking::CONNECT:
+			case Networking::EventType::CONNECT:
 				eventTypeStr = "CONNECT";
 				break;
-			case Networking::FAILED_CONNECTION:
+			case Networking::EventType::FAILED_CONNECTION:
 				eventTypeStr = "FAILED_CONNECTION";
 				break;
-			case Networking::DISCONNECT:
+			case Networking::EventType::DISCONNECT:
 				eventTypeStr = "DISCONNECT";
 				break;
-			case Networking::RECEIVE:
+			case Networking::EventType::RECEIVE:
 				eventTypeStr = "RECEIVE";
 				break;
 			}
@@ -189,7 +238,7 @@ int main() // NOLINT
 					  << ":" << e.peer.address.port << " | State: " << static_cast<int>(e.peer.state)
 					  << " | Channel: " << static_cast<int>(e.channelId) << "\n";
 
-			if (e.type == Networking::RECEIVE)
+			if (e.type == Networking::EventType::RECEIVE)
 			{
 				std::cout << "       Message: ";
 
@@ -208,9 +257,9 @@ int main() // NOLINT
 	if (input.joinable())
 	{
 		input.detach();
-
-		Networking::Close();
 	}
+
+	Node::Shutdown();
 
 	return 0;
 }

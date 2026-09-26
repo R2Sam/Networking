@@ -15,7 +15,7 @@ namespace Networking
 	using PeerId = u64;
 	using ChannelId = u8;
 
-	enum ConnectionState : u8
+	enum class ConnectionState : u8
 	{
 		CONNECTING,
 		CONNECTED,
@@ -28,10 +28,10 @@ namespace Networking
 		PeerId id = {};
 		Address address = {};
 		u32 pingMs = {};
-		ConnectionState state = DISCONNECTED;
+		ConnectionState state = ConnectionState::DISCONNECTED;
 	};
 
-	enum EventType : u8
+	enum class EventType : u8
 	{
 		CONNECT,
 		FAILED_CONNECTION,
@@ -52,7 +52,7 @@ namespace Networking
 	bool InitServer(const u16 port, const u32 maxPeers = 64, const u32 channels = 1);
 	bool InitClient(const u32 maxPeers = 64, const u32 channels = 1);
 
-	void Close();
+	void Shutdown();
 
 	std::optional<Networking::PeerId> Connect(const Address& address, const u32 data = 0);
 	std::optional<Networking::PeerId> Connect(const std::string& ip, const u16 port, const u32 data = 0);
