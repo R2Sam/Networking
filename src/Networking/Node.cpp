@@ -2,14 +2,12 @@
 #include "Networking/Node.hpp"
 #include "Log/Logger.hpp"
 #include "cereal/MyCereal.h"
+#include "libsodium/sodium/randombytes.h"
 
-#include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <queue>
-#include <random>
 #include <unordered_map>
 #include <vector>
 
@@ -37,7 +35,7 @@ namespace
 
 	struct Announce
 	{
-		NodeId originator = 0;
+		NodeId nodeId = 0;
 		std::string name;
 		u32 seq = 0;
 		u32 ttl = 0;
@@ -45,7 +43,7 @@ namespace
 		template <class Archive>
 		void serialize(Archive& ar) // NOLINT
 		{
-			ar(originator, name, seq, ttl);
+			ar(nodeId, name, seq, ttl);
 		}
 	};
 
@@ -77,11 +75,11 @@ namespace
 
 	struct RouteEntry
 	{
-		NodeId originator = 0;
+		NodeId nodeId = 0;
 		std::string name;
 		PeerId nextHop = 0;
 		u32 seq = 0;
-		u32 metric = 0;
+		u32 hops = 0;
 		std::chrono::steady_clock::time_point lastSeen;
 	};
 
@@ -94,7 +92,7 @@ namespace
 	std::unordered_map<PeerId, NodeId> s_peerToNode;
 	std::unordered_map<NodeId, std::queue<std::vector<std::byte>>> s_pending;
 
-	std::chrono::steady_clock::time_point s_lastOgm{};
+	std::chrono::steady_clock::time_point s_lastAnnounce{};
 
 	std::vector<std::byte> PackMessage(const PacketType type, const std::vector<std::byte>& body)
 	{
@@ -109,7 +107,10 @@ namespace
 
 	void SendRaw(const PeerId peer, const std::vector<std::byte>& data, const bool reliable)
 	{
-		Networking::Send(peer, data, 0, reliable);
+		if (!Networking::Send(peer, data, 0, reliable))
+		{
+			Logger::Write<LogLevel::DEBUG>("Node failed to send raw packet to peer: ", peer);
+		}
 	}
 
 	void Broadcast(const std::vector<std::byte>& data, const bool reliable, const PeerId except = 0)
@@ -134,11 +135,11 @@ namespace
 	void UpdateSelfRoute()
 	{
 		RouteEntry self;
-		self.originator = s_selfId;
+		self.nodeId = s_selfId;
 		self.name = s_selfName;
 		self.nextHop = 0;
 		self.seq = s_selfSeq;
-		self.metric = 0;
+		self.hops = 0;
 		self.lastSeen = std::chrono::steady_clock::now();
 		s_routes[s_selfId] = self;
 	}
@@ -146,7 +147,7 @@ namespace
 	void SendOwnAnnuounce(const PeerId onlyTo = 0)
 	{
 		Announce announce;
-		announce.originator = s_selfId;
+		announce.nodeId = s_selfId;
 		announce.name = s_selfName;
 		announce.seq = ++s_selfSeq;
 		announce.ttl = ANNOUNCE_TTL;
@@ -155,11 +156,13 @@ namespace
 
 		if (onlyTo != 0)
 		{
+			Logger::Write<LogLevel::TRACE>("Node sending announce to peer: ", onlyTo, " seq: ", announce.seq);
 			SendRaw(onlyTo, msg, false);
 		}
 
 		else
 		{
+			Logger::Write<LogLevel::TRACE>("Node broadcasting announce seq: ", announce.seq);
 			Broadcast(msg, false);
 		}
 
@@ -168,6 +171,8 @@ namespace
 
 	void ForwardAnnounce(const Announce& annouce, const PeerId from)
 	{
+		Logger::Write<LogLevel::TRACE>("Node forwarding announce for node: ", annouce.nodeId, " seq: ", annouce.seq,
+		" ttl: ", annouce.ttl, " except peer: ", from);
 		const auto msg = PackMessage(PacketType::ANNOUNCE, Serialize(annouce));
 		Broadcast(msg, false, from);
 	}
@@ -181,6 +186,9 @@ namespace
 		}
 
 		auto& q = it->second;
+		const size_t count = q.size();
+		Logger::Write<LogLevel::DEBUG>("Node flushing ", count, " pending packets to node: ", dst,
+		" via peer: ", nextHop);
 		while (!q.empty())
 		{
 			Data data;
@@ -204,14 +212,15 @@ namespace
 
 	void HandleAnnounce(const Announce& announce, const PeerId from)
 	{
-		if (announce.originator == s_selfId)
+		if (announce.nodeId == s_selfId)
 		{
+			Logger::Write<LogLevel::DEBUG>("Node received its own announce back from peer: ", from);
 			return;
 		}
 
-		const u32 metric = (announce.ttl <= ANNOUNCE_TTL) ? (ANNOUNCE_TTL - announce.ttl + 1) : 1;
+		const u32 hops = (announce.ttl <= ANNOUNCE_TTL) ? (ANNOUNCE_TTL - announce.ttl + 1) : 1;
 
-		auto it = s_routes.find(announce.originator);
+		auto it = s_routes.find(announce.nodeId);
 		bool update = false;
 
 		if (it == s_routes.end())
@@ -224,23 +233,26 @@ namespace
 			update = true;
 		}
 
-		else if (announce.seq == it->second.seq && metric < it->second.metric)
+		else if (announce.seq == it->second.seq && hops < it->second.hops)
 		{
 			update = true;
 		}
 
 		if (update)
 		{
+			Logger::Write<LogLevel::DEBUG>("Node added/updated route to node: ", announce.nodeId,
+			" name: ", announce.name, " via peer: ", from, " seq: ", announce.seq, " hops: ", hops);
+
 			RouteEntry entry;
-			entry.originator = announce.originator;
+			entry.nodeId = announce.nodeId;
 			entry.name = announce.name;
 			entry.nextHop = from;
 			entry.seq = announce.seq;
-			entry.metric = metric;
+			entry.hops = hops;
 			entry.lastSeen = std::chrono::steady_clock::now();
-			s_routes[announce.originator] = entry;
+			s_routes[announce.nodeId] = entry;
 
-			FlushPending(announce.originator, from);
+			FlushPending(announce.nodeId, from);
 		}
 
 		else if (it != s_routes.end())
@@ -249,19 +261,21 @@ namespace
 
 			if (!announce.name.empty() && it->second.name != announce.name)
 			{
+				Logger::Write<LogLevel::DEBUG>("Node updated name for node: ", announce.nodeId,
+				" from: ", it->second.name, " to: ", announce.name);
 				it->second.name = announce.name;
 			}
 		}
 
-		if (metric == 1)
+		if (hops == 1)
 		{
-			s_peerToNode[from] = announce.originator;
+			s_peerToNode[from] = announce.nodeId;
 		}
 
-		auto sit = s_seenSeq.find(announce.originator);
+		auto sit = s_seenSeq.find(announce.nodeId);
 		if (sit == s_seenSeq.end() || announce.seq > sit->second)
 		{
-			s_seenSeq[announce.originator] = announce.seq;
+			s_seenSeq[announce.nodeId] = announce.seq;
 
 			if (announce.ttl > 1)
 			{
@@ -298,19 +312,28 @@ namespace
 
 		if (data.ttl == 0)
 		{
+			Logger::Write<LogLevel::WARN>("Node dropping data for node: ", data.dst, " from node: ", data.src,
+			" ttl exhausted");
 			return;
 		}
 
 		auto it = s_routes.find(data.dst);
 		if (it == s_routes.end())
 		{
+			Logger::Write<LogLevel::DEBUG>("Node dropping data for node: ", data.dst, " from node: ", data.src,
+			" no route");
 			return;
 		}
 
 		if (it->second.nextHop == from)
 		{
+			Logger::Write<LogLevel::WARN>("Node dropping data for node: ", data.dst, " from node: ", data.src,
+			" would loop back to peer: ", from);
 			return;
 		}
+
+		Logger::Write<LogLevel::TRACE>("Node forwarding data for node: ", data.dst, " from node: ", data.src,
+		" via peer: ", it->second.nextHop, " ttl: ", data.ttl);
 
 		Data fwd = data;
 		fwd.ttl = data.ttl - 1;
@@ -322,6 +345,7 @@ namespace
 	{
 		if (departure.node == s_selfId)
 		{
+			Logger::Write<LogLevel::DEBUG>("Node received its own departure back from peer: ", from);
 			return;
 		}
 
@@ -330,6 +354,8 @@ namespace
 		auto it = s_routes.find(departure.node);
 		if (it != s_routes.end() && it->second.nextHop == from)
 		{
+			Logger::Write<LogLevel::DEBUG>("Node removed route to node: ", departure.node,
+			" after departure from peer: ", from);
 			s_routes.erase(it);
 			s_pending.erase(departure.node);
 			removed = true;
@@ -350,8 +376,10 @@ namespace
 
 		for (auto it = s_routes.begin(); it != s_routes.end();)
 		{
-			if (it->second.originator != s_selfId && it->second.nextHop == peer)
+			if (it->second.nodeId != s_selfId && it->second.nextHop == peer)
 			{
+				Logger::Write<LogLevel::DEBUG>("Node removed route to node: ", it->second.nodeId, " via peer: ", peer);
+				s_pending.erase(it->first);
 				it = s_routes.erase(it);
 			}
 			else
@@ -367,7 +395,7 @@ namespace
 
 		for (auto it = s_routes.begin(); it != s_routes.end();)
 		{
-			if (it->second.originator == s_selfId)
+			if (it->second.nodeId == s_selfId)
 			{
 				++it;
 				continue;
@@ -377,6 +405,8 @@ namespace
 
 			if (ageMs > ROUTE_TIMEOUT_MS)
 			{
+				Logger::Write<LogLevel::INFO>("Node expired route to node: ", it->second.nodeId, " after ", ageMs,
+				" ms via peer: ", it->second.nextHop);
 				s_pending.erase(it->first);
 				it = s_routes.erase(it);
 			}
@@ -393,15 +423,16 @@ bool Node::Init(const u16 port, const std::string& name)
 	const bool ok = (port == 0) ? Networking::InitClient() : Networking::InitServer(port);
 	if (!ok)
 	{
+		Logger::Write<LogLevel::ERROR>("Node failed to init networking on port: ", port);
 		return false;
 	}
 
-	std::random_device rd;
-	s_selfId = (static_cast<u64>(rd()) << 32) | static_cast<u64>(rd());
-	if (s_selfId == 0)
+	u8 buffer[sizeof(s_selfId)] = {};
+	do
 	{
-		s_selfId = 1;
-	}
+		randombytes(buffer, sizeof(buffer));
+		memcpy(&s_selfId, buffer, sizeof(s_selfId));
+	} while (s_selfId == 0);
 
 	s_selfName = name;
 	s_selfSeq = 0;
@@ -413,12 +444,17 @@ bool Node::Init(const u16 port, const std::string& name)
 
 	UpdateSelfRoute();
 
-	s_lastOgm = std::chrono::steady_clock::now() - std::chrono::milliseconds(ANNOUNCE_INTERVAL_MS);
+	Logger::Write<LogLevel::INFO>("Node initialized with id: ", s_selfId, " name: ", s_selfName,
+	" port: ", Networking::GetLocalPort());
+
+	s_lastAnnounce = std::chrono::steady_clock::now() - std::chrono::milliseconds(ANNOUNCE_INTERVAL_MS);
 	return true;
 }
 
 void Node::Shutdown()
 {
+	Logger::Write<LogLevel::INFO>("Node shutting down id: ", s_selfId, " name: ", s_selfName);
+
 	s_routes.clear();
 	s_seenSeq.clear();
 	s_peerToNode.clear();
@@ -432,16 +468,23 @@ void Node::Shutdown()
 
 std::optional<PeerId> Node::Connect(const Networking::Address& address)
 {
-	return Networking::Connect(address);
+	const auto peerId = Networking::Connect(address);
+	if (!peerId)
+	{
+		Logger::Write<LogLevel::WARN>("Node failed to connect to: ", address.ip, ":", address.port);
+	}
+
+	return peerId;
 }
 
 std::optional<PeerId> Node::Connect(const std::string& ip, const u16 port)
 {
-	return Networking::Connect(ip, port);
+	return Connect({ip, port});
 }
 
 void Node::Disconnect(const PeerId peerId)
 {
+	Logger::Write<LogLevel::DEBUG>("Node disconnecting peer: ", peerId);
 	Networking::Disconnect(peerId);
 }
 
@@ -457,17 +500,21 @@ void Node::Poll(std::queue<Networking::Event>& events, const u32 timeoutMs)
 		switch (event.type)
 		{
 		case Networking::EventType::CONNECT:
+			Logger::Write<LogLevel::DEBUG>("Node handling connect for peer: ", event.peer.id);
 			SendOwnAnnuounce(event.peer.id);
 			events.push(event);
 			break;
 
 		case Networking::EventType::FAILED_CONNECTION:
+			Logger::Write<LogLevel::WARN>("Node handling failed connection for peer: ", event.peer.id);
 			RemoveRoutesVia(event.peer.id);
 			events.push(event);
 			break;
 
 		case Networking::EventType::DISCONNECT:
 		{
+			Logger::Write<LogLevel::DEBUG>("Node handling disconnect for peer: ", event.peer.id);
+
 			auto it = s_peerToNode.find(event.peer.id);
 			if (it != s_peerToNode.end())
 			{
@@ -501,6 +548,11 @@ void Node::Poll(std::queue<Networking::Event>& events, const u32 timeoutMs)
 				{
 					HandleDeparture(Deserialize<Departure>(body), event.peer.id);
 				}
+				else
+				{
+					Logger::Write<LogLevel::WARN>("Node received unknown packet type: ", static_cast<u8>(type),
+					" from peer: ", event.peer.id);
+				}
 			}
 			break;
 		}
@@ -511,9 +563,9 @@ void Node::Poll(std::queue<Networking::Event>& events, const u32 timeoutMs)
 	ExpireRoutes();
 
 	const auto now = std::chrono::steady_clock::now();
-	if (std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastOgm).count() >= ANNOUNCE_INTERVAL_MS)
+	if (std::chrono::duration_cast<std::chrono::milliseconds>(now - s_lastAnnounce).count() >= ANNOUNCE_INTERVAL_MS)
 	{
-		s_lastOgm = now;
+		s_lastAnnounce = now;
 		SendOwnAnnuounce();
 	}
 }
@@ -522,6 +574,7 @@ bool Node::Send(const NodeId nodeId, const std::byte* data, const u32 size, cons
 {
 	if (nodeId == 0 || nodeId == s_selfId)
 	{
+		Logger::Write<LogLevel::WARN>("Node tried to send to invalid node: ", nodeId);
 		return false;
 	}
 
@@ -531,12 +584,18 @@ bool Node::Send(const NodeId nodeId, const std::byte* data, const u32 size, cons
 		auto& q = s_pending[nodeId];
 		if (q.size() >= MAX_PENDING_PER_DEST)
 		{
+			Logger::Write<LogLevel::WARN>("Node pending queue full for node: ", nodeId, " size: ", q.size());
 			return false;
 		}
 
+		Logger::Write<LogLevel::DEBUG>("Node queued packet for node: ", nodeId, " size: ", size,
+		" pending: ", q.size() + 1);
 		q.emplace(data, data + size);
 		return true;
 	}
+
+	Logger::Write<LogLevel::DEBUG>("Node sending packet to node: ", nodeId, " via peer: ", it->second.nextHop,
+	" size: ", size, " reliable: ", reliable);
 
 	Data dataPacket;
 	dataPacket.dst = nodeId;
@@ -562,12 +621,13 @@ bool Node::Send(const std::string& name, const std::byte* data, const u32 size, 
 {
 	if (name.empty())
 	{
+		Logger::Write<LogLevel::WARN>("Node tried to send to empty name");
 		return false;
 	}
 
 	for (const auto& [id, entry] : s_routes)
 	{
-		if (entry.originator == s_selfId)
+		if (entry.nodeId == s_selfId)
 		{
 			continue;
 		}
@@ -578,6 +638,7 @@ bool Node::Send(const std::string& name, const std::byte* data, const u32 size, 
 		}
 	}
 
+	Logger::Write<LogLevel::WARN>("Node could not find route by name: ", name);
 	return false;
 }
 
@@ -594,10 +655,15 @@ std::vector<std::pair<Node::Node, Networking::PeerId>> Node::GetRoutes()
 	for (const auto& [id, entry] : s_routes)
 	{
 		Node n;
-		n.id = entry.originator;
+		n.id = entry.nodeId;
 		n.name = entry.name;
 		result.emplace_back(n, entry.nextHop);
 	}
 
 	return result;
+}
+
+Node::NodeId Node::GetSelfId()
+{
+	return s_selfId;
 }

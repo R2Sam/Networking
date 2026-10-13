@@ -2,7 +2,9 @@
 
 #include "Types.hpp"
 
+#include <optional>
 #include <queue>
+#include <string>
 
 namespace Networking
 {
@@ -67,4 +69,6 @@ namespace Networking
 
 	std::optional<Peer> GetPeer(const PeerId peerId);
 	std::vector<PeerId> GetPeerIds();
+
+	u16 GetLocalPort();
 }

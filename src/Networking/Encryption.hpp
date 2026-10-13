@@ -31,8 +31,6 @@ namespace std
 	};
 }
 
-extern unsigned char s_defaultKey[crypto_secretbox_KEYBYTES];
-
 namespace Encryption
 {
 	bool InitEncryption();

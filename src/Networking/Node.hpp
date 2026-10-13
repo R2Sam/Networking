@@ -28,4 +28,5 @@ namespace Node
 	bool Send(const std::string& name, const std::vector<std::byte>& data, const bool reliable = true);
 
 	std::vector<std::pair<Node, Networking::PeerId>> GetRoutes();
+	NodeId GetSelfId();
 }

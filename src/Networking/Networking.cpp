@@ -40,7 +40,7 @@ namespace
 
 		if (s_enetInit)
 		{
-			Logger::Write<LogLevel::WARN>("Tried to init enet twice");
+			Logger::Write<LogLevel::DEBUG>("Tried to init enet twice");
 			return true;
 		}
 
@@ -228,7 +228,11 @@ bool Networking::InitClient(const u32 maxPeers, const u32 channels)
 		return false;
 	}
 
-	s_host = enet_host_create(nullptr, maxPeers, channels, 0, 0);
+	ENetAddress addr = {};
+	addr.host = ENET_HOST_ANY;
+	addr.port = 0;
+
+	s_host = enet_host_create(&addr, maxPeers, channels, 0, 0);
 
 	if (!s_host)
 	{
@@ -387,7 +391,7 @@ const bool reliable)
 	auto it = s_peers.find(peerId);
 	if (it == s_peers.end() || !it->second.enetPeer)
 	{
-		Logger::Write<LogLevel::WARN>("Failed to send packet to non existent peer: ", peerId);
+		Logger::Write<LogLevel::DEBUG>("Failed to send packet to non existent peer: ", peerId);
 		return false;
 	}
 
@@ -444,4 +448,28 @@ std::vector<Networking::PeerId> Networking::GetPeerIds()
 	}
 
 	return peers;
+}
+
+u16 Networking::GetLocalPort()
+{
+	if (!s_host || s_host->socket == ENET_SOCKET_NULL)
+	{
+		return 0;
+	}
+
+	struct sockaddr_in addr = {};
+
+#ifdef _WIN32
+	int len = sizeof(addr);
+#else
+	socklen_t len = sizeof(addr);
+#endif
+
+	if (getsockname(s_host->socket, reinterpret_cast<struct sockaddr*>(&addr), &len) < 0)
+	{
+		Logger::Write<LogLevel::WARN>("Failed to query local socket port");
+		return 0;
+	}
+
+	return ntohs(addr.sin_port);
 }
